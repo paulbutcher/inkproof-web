@@ -59,8 +59,6 @@ def Inkproof.Web.backingPx : Nat → Inkproof.Web.Milli → Nat
 theorem Inkproof.Web.backingPx_close : ∀ {css : Nat} (ratio : Inkproof.Web.Milli), 1000 ≤ css * ratio + 500 → css ≠ 0 → Inkproof.Web.backingPx css ratio * 1000 ≤ css * ratio + 500 ∧ css * ratio < Inkproof.Web.backingPx css ratio * 1000 + 500
 theorem Inkproof.Web.backingPx_pos : ∀ {css : Nat}, 0 < css → ∀ (ratio : Inkproof.Web.Milli), 0 < Inkproof.Web.backingPx css ratio
 theorem Inkproof.Web.backingPx_zero : ∀ (ratio : Inkproof.Web.Milli), Inkproof.Web.backingPx 0 ratio = 0
-def Inkproof.Web.foldTilesM : {m : Type → Type} → [Monad m] → {M : Type} → [Inkproof.Core.Aggregate M] → (n : Nat) → 0 < n → (Nat → m (Array M)) → m Unit → Nat → Nat → m M
-theorem Inkproof.Web.foldTilesM_id : ∀ {M : Type} [inst : Inkproof.Core.Aggregate M] (n : Nat) (hn : 0 < n) (tile : Nat → Array M) (lo hi : Nat), Inkproof.Web.foldTilesM n hn tile (Pure.pure ()) lo hi = Inkproof.Core.Aggregate.foldTiles n hn tile lo hi
 def Inkproof.Web.formatLine : Inkproof.Web.Level → String → List (String × String) → String
 theorem Inkproof.Web.formatLine_eq : ∀ (l : Inkproof.Web.Level) (m : String) (values : List (String × String)), Inkproof.Web.formatLine l m values = " ".intercalate ((ToString.toString "[inkproof " ++ ToString.toString l.name ++ ToString.toString "] " ++ ToString.toString m) :: List.map (fun x => match x with | (k, v) => ToString.toString k ++ ToString.toString "=" ++ ToString.toString v) values)
 theorem Inkproof.Web.formatLine_nil : ∀ (l : Inkproof.Web.Level) (m : String), Inkproof.Web.formatLine l m [] = ToString.toString "[inkproof " ++ ToString.toString l.name ++ ToString.toString "] " ++ ToString.toString m

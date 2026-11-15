@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.0]
+
+- Tile queries use Core's `Aggregate.foldTilesM`; Web's own copy is removed.
+
 ## [0.2.0]
 
 - Tile queries that fetch and aggregate with Core's aggregation, one tile at a time without blocking the main thread.

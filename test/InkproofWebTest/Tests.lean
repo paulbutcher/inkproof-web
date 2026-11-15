@@ -3,11 +3,10 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import Inkproof.Web
-import Inkproof.Core
 import InkproofTools.Test.Harness
 
 namespace InkproofWebTest
-open Inkproof.Web Inkproof.Core InkproofTools.Test
+open Inkproof.Web InkproofTools.Test
 
 /-- A surface sized for an element never needs resizing for that same element. -/
 def sizingCase : TestCase :=
@@ -51,26 +50,6 @@ def attrCase : TestCase :=
       | .error _ => .ok ()
       | .ok a => .error s!"accepted {repr a}"
 
-/-- A range touches only the tiles that hold it, each fetched once, and control is yielded once per tile. -/
-def tilesCase : TestCase :=
-  .mk "a tile query fetches only the tiles it touches" <|
-    forAll 200 (fun g =>
-        let (n, g) := g.below 6
-        let (lo, g) := g.below 40
-        let (len, g) := g.below 40
-        ((n, lo, lo + len), g))
-      fun (k, lo, hi) =>
-        let n := k + 1
-        let fetch (t : Nat) : StateM (List Nat × Nat) (Array (Total Nat)) :=
-          modifyGet fun (seen, y) => (Array.range n |>.map fun j => ⟨t * n + j⟩, (t :: seen, y))
-        let yield : StateM (List Nat × Nat) Unit := modify fun (seen, y) => (seen, y + 1)
-        let (total, seen, yields) := match (foldTilesM n (Nat.succ_pos k) fetch yield lo hi).run ([], 0) with
-          | (r, (seen, y)) => (r, seen, y)
-        let touched := if lo < hi then (hi - 1) / n + 1 - lo / n else 0
-        check (seen.reverse == (List.range touched).map (· + lo / n) && yields == touched
-            && total.get == (List.range (hi - lo)).foldl (fun a i => a + lo + i) 0)
-          s!"n={n} lo={lo} hi={hi} fetched {seen.reverse}, yielded {yields}, total {total.get}"
-
-def tests : List TestCase := [sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, tilesCase]
+def tests : List TestCase := [sizingCase, cacheCase, unmeasuredCase, logCase, attrCase]
 
 end InkproofWebTest
