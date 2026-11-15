@@ -1,0 +1,11 @@
+{
+  "name": "inkproof-web",
+  "private": true,
+  "description": "Builds Inkproof.Web with Lasm for the browser; development only.",
+  "devDependencies": {
+    "@lasm/cli": "0.8.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

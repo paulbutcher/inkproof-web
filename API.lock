@@ -1,0 +1,48 @@
+structure Inkproof.Web.Frame : Type
+field Inkproof.Web.Frame.dirty : Inkproof.Web.Frame → Bool
+def Inkproof.Web.Frame.drawn : Inkproof.Web.Frame → Inkproof.Web.Frame
+def Inkproof.Web.Frame.initial : Inkproof.Web.Frame
+def Inkproof.Web.Frame.invalidate : Inkproof.Web.Frame → Inkproof.Web.Frame
+constructor Inkproof.Web.Frame.mk : Bool → Inkproof.Web.Frame
+theorem Inkproof.Web.Frame.not_shouldDraw_drawn : ∀ (f : Inkproof.Web.Frame), f.drawn.shouldDraw = Bool.false
+def Inkproof.Web.Frame.shouldDraw : Inkproof.Web.Frame → Bool
+theorem Inkproof.Web.Frame.shouldDraw_initial : Inkproof.Web.Frame.initial.shouldDraw = Bool.true
+theorem Inkproof.Web.Frame.shouldDraw_invalidate : ∀ (f : Inkproof.Web.Frame), f.invalidate.shouldDraw = Bool.true
+inductive Inkproof.Web.Level : Type
+constructor Inkproof.Web.Level.debug : Inkproof.Web.Level
+def Inkproof.Web.Level.defaultThreshold : Inkproof.Web.Level
+def Inkproof.Web.Level.enabled : Inkproof.Web.Level → Inkproof.Web.Level → Bool
+theorem Inkproof.Web.Level.enabled_iff : ∀ (t l : Inkproof.Web.Level), l.enabled t = Bool.true ↔ t.rank ≤ l.rank
+constructor Inkproof.Web.Level.error : Inkproof.Web.Level
+constructor Inkproof.Web.Level.info : Inkproof.Web.Level
+theorem Inkproof.Web.Level.info_disabled_by_default : Inkproof.Web.Level.info.enabled Inkproof.Web.Level.defaultThreshold = Bool.false
+def Inkproof.Web.Level.ofNat : Nat → Inkproof.Web.Level
+theorem Inkproof.Web.Level.ofNat_ctorIdx : ∀ (x : Inkproof.Web.Level), Inkproof.Web.Level.ofNat x.ctorIdx = x
+def Inkproof.Web.Level.rank : Inkproof.Web.Level → Nat
+constructor Inkproof.Web.Level.warn : Inkproof.Web.Level
+theorem Inkproof.Web.Level.warn_enabled_by_default : Inkproof.Web.Level.warn.enabled Inkproof.Web.Level.defaultThreshold = Bool.true
+def Inkproof.Web.Milli : Type
+structure Inkproof.Web.Size : Type
+def Inkproof.Web.Size.backing : Nat → Nat → Inkproof.Web.Milli → Inkproof.Web.Size
+theorem Inkproof.Web.Size.backing_height : ∀ (w h : Nat) (ratio : Inkproof.Web.Milli), (Inkproof.Web.Size.backing w h ratio).height = Inkproof.Web.backingPx h ratio
+theorem Inkproof.Web.Size.backing_width : ∀ (w h : Nat) (ratio : Inkproof.Web.Milli), (Inkproof.Web.Size.backing w h ratio).width = Inkproof.Web.backingPx w ratio
+field Inkproof.Web.Size.height : Inkproof.Web.Size → Nat
+constructor Inkproof.Web.Size.mk : Nat → Nat → Inkproof.Web.Size
+def Inkproof.Web.Size.needsResize : Inkproof.Web.Size → Nat → Nat → Inkproof.Web.Milli → Bool
+theorem Inkproof.Web.Size.needsResize_iff : ∀ (current : Inkproof.Web.Size) (w h : Nat) (ratio : Inkproof.Web.Milli), current.needsResize w h ratio = Bool.true ↔ current ≠ Inkproof.Web.Size.backing w h ratio
+field Inkproof.Web.Size.width : Inkproof.Web.Size → Nat
+def Inkproof.Web.backingPx : Nat → Inkproof.Web.Milli → Nat
+theorem Inkproof.Web.backingPx_close : ∀ {css : Nat} (ratio : Inkproof.Web.Milli), 1000 ≤ css * ratio + 500 → css ≠ 0 → Inkproof.Web.backingPx css ratio * 1000 ≤ css * ratio + 500 ∧ css * ratio < Inkproof.Web.backingPx css ratio * 1000 + 500
+theorem Inkproof.Web.backingPx_pos : ∀ {css : Nat}, 0 < css → ∀ (ratio : Inkproof.Web.Milli), 0 < Inkproof.Web.backingPx css ratio
+theorem Inkproof.Web.backingPx_zero : ∀ (ratio : Inkproof.Web.Milli), Inkproof.Web.backingPx 0 ratio = 0
+instance Inkproof.Web.instDecidableEqFrame : DecidableEq Inkproof.Web.Frame
+def Inkproof.Web.instDecidableEqFrame.decEq : (x x_1 : Inkproof.Web.Frame) → Decidable (x = x_1)
+instance Inkproof.Web.instDecidableEqLevel : DecidableEq Inkproof.Web.Level
+instance Inkproof.Web.instDecidableEqSize : DecidableEq Inkproof.Web.Size
+def Inkproof.Web.instDecidableEqSize.decEq : (x x_1 : Inkproof.Web.Size) → Decidable (x = x_1)
+instance Inkproof.Web.instReprFrame : Repr Inkproof.Web.Frame
+def Inkproof.Web.instReprFrame.repr : Inkproof.Web.Frame → Nat → Std.Format
+instance Inkproof.Web.instReprLevel : Repr Inkproof.Web.Level
+def Inkproof.Web.instReprLevel.repr : Inkproof.Web.Level → Nat → Std.Format
+instance Inkproof.Web.instReprSize : Repr Inkproof.Web.Size
+def Inkproof.Web.instReprSize.repr : Inkproof.Web.Size → Nat → Std.Format
