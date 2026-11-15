@@ -1,3 +1,10 @@
+structure Inkproof.Web.ChartAttrs : Type
+field Inkproof.Web.ChartAttrs.logLevel : Inkproof.Web.ChartAttrs → Option Inkproof.Web.Level
+constructor Inkproof.Web.ChartAttrs.mk : String → Option Inkproof.Web.Level → Inkproof.Web.ChartAttrs
+def Inkproof.Web.ChartAttrs.parse : Option String → Option String → Except String Inkproof.Web.ChartAttrs
+theorem Inkproof.Web.ChartAttrs.parse_missing_src : ∀ (l : Option String), ∃ e, Inkproof.Web.ChartAttrs.parse Option.none l = Except.error e
+theorem Inkproof.Web.ChartAttrs.parse_ok : ∀ {s : String}, s ≠ "" → ∀ (l : Option Inkproof.Web.Level), Inkproof.Web.ChartAttrs.parse (Option.some s) (Option.map Inkproof.Web.Level.name l) = Except.ok { src := s, logLevel := l }
+field Inkproof.Web.ChartAttrs.src : Inkproof.Web.ChartAttrs → String
 structure Inkproof.Web.Frame : Type
 field Inkproof.Web.Frame.dirty : Inkproof.Web.Frame → Bool
 def Inkproof.Web.Frame.drawn : Inkproof.Web.Frame → Inkproof.Web.Frame
@@ -16,8 +23,13 @@ theorem Inkproof.Web.Level.enabled_iff : ∀ (t l : Inkproof.Web.Level), l.enabl
 constructor Inkproof.Web.Level.error : Inkproof.Web.Level
 constructor Inkproof.Web.Level.info : Inkproof.Web.Level
 theorem Inkproof.Web.Level.info_disabled_by_default : Inkproof.Web.Level.info.enabled Inkproof.Web.Level.defaultThreshold = Bool.false
+def Inkproof.Web.Level.name : Inkproof.Web.Level → String
+theorem Inkproof.Web.Level.name_eq : ∀ (l : Inkproof.Web.Level), l.name = match l with | Inkproof.Web.Level.debug => "debug" | Inkproof.Web.Level.info => "info" | Inkproof.Web.Level.warn => "warn" | Inkproof.Web.Level.error => "error"
 def Inkproof.Web.Level.ofNat : Nat → Inkproof.Web.Level
 theorem Inkproof.Web.Level.ofNat_ctorIdx : ∀ (x : Inkproof.Web.Level), Inkproof.Web.Level.ofNat x.ctorIdx = x
+def Inkproof.Web.Level.parse? : String → Option Inkproof.Web.Level
+theorem Inkproof.Web.Level.parse?_name : ∀ (l : Inkproof.Web.Level), Inkproof.Web.Level.parse? l.name = Option.some l
+theorem Inkproof.Web.Level.parse?_none : ∀ {s : String}, ¬s ∈ ["debug", "info", "warn", "error"] → Inkproof.Web.Level.parse? s = Option.none
 def Inkproof.Web.Level.rank : Inkproof.Web.Level → Nat
 constructor Inkproof.Web.Level.warn : Inkproof.Web.Level
 theorem Inkproof.Web.Level.warn_enabled_by_default : Inkproof.Web.Level.warn.enabled Inkproof.Web.Level.defaultThreshold = Bool.true
@@ -31,15 +43,38 @@ constructor Inkproof.Web.Size.mk : Nat → Nat → Inkproof.Web.Size
 def Inkproof.Web.Size.needsResize : Inkproof.Web.Size → Nat → Nat → Inkproof.Web.Milli → Bool
 theorem Inkproof.Web.Size.needsResize_iff : ∀ (current : Inkproof.Web.Size) (w h : Nat) (ratio : Inkproof.Web.Milli), current.needsResize w h ratio = Bool.true ↔ current ≠ Inkproof.Web.Size.backing w h ratio
 field Inkproof.Web.Size.width : Inkproof.Web.Size → Nat
+structure Inkproof.Web.TextCache : Type
+def Inkproof.Web.TextCache.empty : Inkproof.Web.TextCache
+def Inkproof.Web.TextCache.find? : Inkproof.Web.TextCache → String → String → Option (Float × Float)
+theorem Inkproof.Web.TextCache.find?_empty : ∀ (font text : String), Inkproof.Web.TextCache.empty.find? font text = Option.none
+theorem Inkproof.Web.TextCache.find?_insert : ∀ (c : Inkproof.Web.TextCache) (font text : String) (size : Float × Float), (c.insert font text size).find? font text = Option.some size
+def Inkproof.Web.TextCache.getOrMeasure : {m : Type → Type} → [Monad m] → Inkproof.Web.TextCache → String → String → (String → String → m (Float × Float)) → m ((Float × Float) × Inkproof.Web.TextCache)
+theorem Inkproof.Web.TextCache.getOrMeasure_found : ∀ {m : Type → Type} [inst : Monad m] [LawfulMonad m] (c : Inkproof.Web.TextCache) (font text : String) (measure : String → String → m (Float × Float)) {size : Float × Float}, c.find? font text = Option.some size → c.getOrMeasure font text measure = Pure.pure (size, c)
+def Inkproof.Web.TextCache.insert : Inkproof.Web.TextCache → String → String → Float × Float → Inkproof.Web.TextCache
+def Inkproof.Web.TextCache.measurer : Inkproof.Web.TextCache → String → String → Float × Float
+theorem Inkproof.Web.TextCache.measurer_insert : ∀ (c : Inkproof.Web.TextCache) (font text : String) (size : Float × Float), (c.insert font text size).measurer font text = size
+constructor Inkproof.Web.TextCache.mk : Std.HashMap (String × String) (Float × Float) → Inkproof.Web.TextCache
+field Inkproof.Web.TextCache.sizes : Inkproof.Web.TextCache → Std.HashMap (String × String) (Float × Float)
 def Inkproof.Web.backingPx : Nat → Inkproof.Web.Milli → Nat
 theorem Inkproof.Web.backingPx_close : ∀ {css : Nat} (ratio : Inkproof.Web.Milli), 1000 ≤ css * ratio + 500 → css ≠ 0 → Inkproof.Web.backingPx css ratio * 1000 ≤ css * ratio + 500 ∧ css * ratio < Inkproof.Web.backingPx css ratio * 1000 + 500
 theorem Inkproof.Web.backingPx_pos : ∀ {css : Nat}, 0 < css → ∀ (ratio : Inkproof.Web.Milli), 0 < Inkproof.Web.backingPx css ratio
 theorem Inkproof.Web.backingPx_zero : ∀ (ratio : Inkproof.Web.Milli), Inkproof.Web.backingPx 0 ratio = 0
+def Inkproof.Web.formatLine : Inkproof.Web.Level → String → List (String × String) → String
+theorem Inkproof.Web.formatLine_eq : ∀ (l : Inkproof.Web.Level) (m : String) (values : List (String × String)), Inkproof.Web.formatLine l m values = " ".intercalate ((ToString.toString "[inkproof " ++ ToString.toString l.name ++ ToString.toString "] " ++ ToString.toString m) :: List.map (fun x => match x with | (k, v) => ToString.toString k ++ ToString.toString "=" ++ ToString.toString v) values)
+theorem Inkproof.Web.formatLine_nil : ∀ (l : Inkproof.Web.Level) (m : String), Inkproof.Web.formatLine l m [] = ToString.toString "[inkproof " ++ ToString.toString l.name ++ ToString.toString "] " ++ ToString.toString m
+instance Inkproof.Web.instDecidableEqChartAttrs : DecidableEq Inkproof.Web.ChartAttrs
+def Inkproof.Web.instDecidableEqChartAttrs.decEq : (x x_1 : Inkproof.Web.ChartAttrs) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqFrame : DecidableEq Inkproof.Web.Frame
 def Inkproof.Web.instDecidableEqFrame.decEq : (x x_1 : Inkproof.Web.Frame) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqLevel : DecidableEq Inkproof.Web.Level
 instance Inkproof.Web.instDecidableEqSize : DecidableEq Inkproof.Web.Size
 def Inkproof.Web.instDecidableEqSize.decEq : (x x_1 : Inkproof.Web.Size) → Decidable (x = x_1)
+instance Inkproof.Web.instInhabitedLevel : Inhabited Inkproof.Web.Level
+def Inkproof.Web.instInhabitedLevel.default : Inkproof.Web.Level
+instance Inkproof.Web.instInhabitedTextCache : Inhabited Inkproof.Web.TextCache
+def Inkproof.Web.instInhabitedTextCache.default : Inkproof.Web.TextCache
+instance Inkproof.Web.instReprChartAttrs : Repr Inkproof.Web.ChartAttrs
+def Inkproof.Web.instReprChartAttrs.repr : Inkproof.Web.ChartAttrs → Nat → Std.Format
 instance Inkproof.Web.instReprFrame : Repr Inkproof.Web.Frame
 def Inkproof.Web.instReprFrame.repr : Inkproof.Web.Frame → Nat → Std.Format
 instance Inkproof.Web.instReprLevel : Repr Inkproof.Web.Level

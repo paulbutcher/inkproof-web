@@ -19,8 +19,28 @@ require «inkproof-tools» from git "https://github.com/paulbutcher/inkproof-too
 lean_exe tests where
   root := `Main
 
+lean_lib InkproofWebTest where
+  globs := #[.submodules `InkproofWebTest]
+
+lean_exe genchart where
+  root := `GenChart
+
+/-- The native and Lasm tests, then the browser tests when Playwright is installed. -/
 @[test_driver]
 script test do
   let driver ← IO.Process.spawn
     { cmd := "lake", args := #["exe", "inkproof-tools/inkproof-test-driver"], cwd := __dir__ }
-  driver.wait
+  let code ← driver.wait
+  if code != 0 then return code
+  unless ← (__dir__ / "node_modules" / "playwright").pathExists do
+    IO.eprintln "::warning::Browser tests skipped: run `npm ci` in test/"
+    return 0
+  let steps := #[("gpu-js", "bash", #["-c", "d=$(mktemp -d) && ../scripts/gpu-module.sh $d && diff -r $d ../gpu-js"]),
+    ("web", "lake", #["exe", "genchart", "web/public/chart.bin"]),
+    ("build", "npx", #["vite", "build"]), ("browser", "node", #["--test", "browser.test.mjs"])]
+  for (name, cmd, args) in steps do
+    IO.println s!"== {name}"
+    let child ← IO.Process.spawn { cmd, args, cwd := __dir__, env := #[("LASM_EDITOR", some "0")] }
+    let code ← child.wait
+    if code != 0 then return code
+  return 0

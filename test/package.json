@@ -1,9 +1,16 @@
 {
   "name": "inkproof-web",
   "private": true,
-  "description": "Builds Inkproof.Web with Lasm for the browser; development only.",
+  "description": "Builds Inkproof.Web with Lasm for the browser and tests it in Chromium; development only.",
+  "type": "module",
   "devDependencies": {
-    "@lasm/cli": "0.8.0"
+    "@lasm/cli": "0.8.0",
+    "playwright": "1.64.1",
+    "vite": "^8.3.8"
+  },
+  "dependencies": {
+    "inkproof-gpu-js": "file:../gpu-js",
+    "inkproof-web-element": "file:../shim/inkproof-web-element"
   },
   "engines": {
     "node": ">=24.0.0"

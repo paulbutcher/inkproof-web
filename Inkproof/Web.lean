@@ -5,5 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import Inkproof.Web.Surface
 import Inkproof.Web.Frame
 import Inkproof.Web.Log
+import Inkproof.Web.Attr
+import Inkproof.Web.Text
 
 /-! # Inkproof.Web -/

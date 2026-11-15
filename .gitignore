@@ -5,3 +5,5 @@
 
 # Deployment settings for the agents; never part of the library.
 .env
+/test/dist/
+/test/web/public/chart.bin
