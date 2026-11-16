@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.0]
+
+- Keyboard control (zoom, pan, cursor, series) and accessible summaries and data tables on the chart element.
+
 ## [0.3.0]
 
 - Tile queries use Core's `Aggregate.foldTilesM`; Web's own copy is removed.

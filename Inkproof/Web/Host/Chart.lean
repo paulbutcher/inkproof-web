@@ -9,6 +9,7 @@ import Std.Data.HashMap
 import Inkproof.Web.Surface
 import Inkproof.Web.Frame
 import Inkproof.Web.Attr
+import Inkproof.Web.Access
 import Inkproof.Web.Host.Console
 import Inkproof.Web.Host.Gpu
 import Inkproof.Web.Host.Element
@@ -28,6 +29,7 @@ structure Label where
 structure Scene where
   commands : ByteArray
   labels : Array Label := #[]
+  access : Access := {}
 
 /-- Fetch `src` and take its body as the command list. -/
 def fetchScene (src : String) : Async Scene := do
@@ -45,6 +47,10 @@ private structure Chart where
   el : Value
   canvas : Value
   ctx : Value
+  announcer : Value
+  table : Value
+  nav : IO.Ref (Option Nav)
+  keydown : IO.Ref (Option Value)
   frame : IO.Ref Frame
   scheduled : IO.Ref Bool
   alive : IO.Ref Bool
@@ -179,7 +185,11 @@ private partial def watchRatio (c : Chart) : IO Unit := do
   c.ratioQuery.set (some (query, changed))
 
 private def styles : String :=
-  ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}"
+  ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}" ++
+  ".hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}" ++
+  ":host([show-table]) canvas{display:none}:host([show-table]) .hidden:not([aria-live]){position:static;width:100%;height:auto;overflow:auto;clip-path:none}"
+
+private def newElement (doc : Value) (tag : String) : IO Value := doc.callMethod "createElement" #[toJS tag]
 
 private def build (id : Nat) (el : Value) : IO Chart := do
   let doc ← (← global).get "document"
@@ -190,16 +200,78 @@ private def build (id : Nat) (el : Value) : IO Chart := do
       let style ← doc.callMethod "createElement" #[toJS "style"]
       style.set "textContent" styles
       root.callMethod "append" #[toJS style] Unit
-      root.callMethod "append" #[toJS (← doc.callMethod "createElement" #[toJS "canvas"])] Unit
+      root.callMethod "append" #[toJS (← newElement doc "canvas")] Unit
+      let announcer ← newElement doc "div"
+      announcer.callMethod "setAttribute" #[toJS "aria-live", toJS "polite"] Unit
+      announcer.set "className" "hidden"
+      let table ← newElement doc "table"
+      let wrapper ← newElement doc "div"
+      wrapper.set "className" "hidden"
+      wrapper.callMethod "append" #[toJS table] Unit
+      root.callMethod "append" #[toJS announcer, toJS wrapper] Unit
       pure root
   let canvas ← root.callMethod "querySelector" #[toJS "canvas"]
+  let announcer ← root.callMethod "querySelector" #[toJS "div"]
+  let table ← root.callMethod "querySelector" #[toJS "table"]
   let ctx ← canvas.callMethod "getContext" #[toJS "2d"]
   return {
-    id, el, canvas, ctx
+    id, el, canvas, ctx, announcer, table
+    nav := ← IO.mkRef none, keydown := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none
     ratioQuery := ← IO.mkRef none }
+
+private def setText (c : Chart) (text : String) : IO Unit := c.announcer.set "textContent" text
+
+private def refreshSummary (c : Chart) (access : Access) : IO Unit := do
+  let view := (← c.nav.get).map (·.view)
+  c.el.callMethod "setAttribute" #[toJS "aria-description", toJS (access.summaryText view)] Unit
+
+private def rebuildTable (c : Chart) (access : Access) : IO Unit := do
+  let doc ← (← global).get "document"
+  c.table.callMethod "replaceChildren" #[] Unit
+  let row (cells : Array String) (tag : String) : IO Unit := do
+    let tr ← newElement doc "tr"
+    for cell in cells do
+      let td ← newElement doc tag
+      td.set "textContent" cell
+      tr.callMethod "append" #[toJS td] Unit
+    c.table.callMethod "append" #[toJS tr] Unit
+  unless access.header.isEmpty do row access.header "th"
+  for cells in access.rows do row cells "td"
+
+/-- Make the chart reachable by keyboard and assistive technology: focusable, named, described, with the data as a table. -/
+private def publish (c : Chart) (access : Access) : IO Unit := do
+  c.nav.set (access.view.map fun v => Nav.home ⟨v, access.points, access.series.size⟩)
+  if (← getAttr c.el "tabindex").isNone then c.el.callMethod "setAttribute" #[toJS "tabindex", toJS "0"] Unit
+  c.el.callMethod "setAttribute" #[toJS "role", toJS "img"] Unit
+  c.el.callMethod "setAttribute" #[toJS "aria-label", toJS access.name] Unit
+  refreshSummary c access
+  rebuildTable c access
+
+private def onKey (c : Chart) (event : Value) : IO Unit := do
+  let some scene ← c.scene.get | return
+  let some config := scene.access.view | return
+  let some nav ← c.nav.get | return
+  let held (flag : String) : IO Bool := event.get flag Bool
+  if (← held "ctrlKey") || (← held "altKey") || (← held "metaKey") then return
+  let key ← event.get "key" String
+  let some command := Command.ofKey key (← held "shiftKey") | return
+  event.callMethod "preventDefault" #[] Unit
+  let navConfig : NavConfig := ⟨config, scene.access.points, scene.access.series.size⟩
+  let next := nav.apply navConfig command
+  c.nav.set (some next)
+  if next.view != nav.view then
+    let x := next.view.x
+    let y := next.view.y
+    dispatch c.el "inkproof-view" (obj [("xStart", toJS x.start), ("xEnd", toJS (x.start + x.span)),
+      ("yStart", toJS y.start), ("yEnd", toJS (y.start + y.span))])
+    refreshSummary c scene.access
+    setText c (scene.access.summaryText (some next.view))
+  if next.point != nav.point || next.series != nav.series then
+    dispatch c.el "inkproof-cursor" (obj [("series", toJS next.series), ("point", toJS next.point)])
+    setText c (scene.access.cursorText next)
 
 private def load (c : Chart) (loader : String → Async Scene) : Async Unit := do
   let src ← getAttr c.el "src"
@@ -215,6 +287,7 @@ private def load (c : Chart) (loader : String → Async Scene) : Async Unit := d
       -- A newer load or a disconnect has overtaken this one.
       if (← c.generation.get) == generation && (← c.alive.get) then
         c.scene.set (some scene)
+        publish c scene.access
         invalidate c
     catch e =>
       fail c s!"loading the chart failed: {e}" [("src", attrs.src)]
@@ -231,6 +304,11 @@ private def connect (loader : String → Async Scene) (args : Array Data) : Asyn
   let c ← build id el
   el.set idKey id
   live.modify (·.insert id c)
+  let keydown ← Function.ofSyncFn fun args => do
+    if let some (Data.ref event _) := args[0]? then onKey c event
+    return .undefined
+  el.callMethod "addEventListener" #[toJS "keydown", toJS keydown] Unit
+  c.keydown.set (some keydown)
   c.frameCallback.set (some (← Function.ofSyncFn fun _ => do onFrame c; return .undefined))
   let observe ← Function.ofSyncFn fun _ => do
     if (← c.alive.get) then sync c
@@ -245,6 +323,7 @@ private def connect (loader : String → Async Scene) (args : Array Data) : Asyn
 private def disconnect (args : Array Data) : IO Data := do
   if let some c ← chartOf args then
     c.alive.set false
+    if let some k ← c.keydown.get then c.el.callMethod "removeEventListener" #[toJS "keydown", toJS k] Unit
     if let some o ← c.observer.get then o.callMethod "disconnect" #[] Unit
     if let some (query, changed) ← c.ratioQuery.get then
       query.callMethod "removeEventListener" #[toJS "change", toJS changed] Unit

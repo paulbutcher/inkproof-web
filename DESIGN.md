@@ -12,6 +12,11 @@ Lasm's browser bindings (`Lasm.JS.Web`, `Lasm.UI`) ship with `@lasm/cli` and are
 - Attributes are `src` (a URL of an encoded command list, or whatever the registered loader makes of it) and `log-level`. Invalid ones are logged and dispatched as `inkproof-error`; each redraw dispatches `inkproof-draw` with the backing size.
 - Fetching runs as `Async` on the main thread, which never blocks; Lean in Lasm's browser target is single-threaded, so there is no worker. Tile queries (`queryTiles`) fetch only the tiles a range touches, one at a time, merge them with Core's aggregation (`Aggregate.foldTilesM`, which is `foldTiles` with the fetch in a monad), and yield to the event loop after each tile, so a long query never holds the main thread. A failed tile is logged with its URL and fails the query. A worker is not used: it would need a second Lasm build and a second shim. Text measurement is `Canvas 2D measureText`, cached by font and text. A text that could not be measured is NaN, which Axis drops rather than places.
 
+## Accessibility
+
+- A scene carries an `Access`: the chart's name, series, point count, optional summary, a data table and the view configuration. The element becomes focusable (`tabindex` 0 unless set), takes the name as `aria-label` and the summary as `aria-description`, and holds the data in a visually hidden table; the `show-table` attribute swaps the canvas for it.
+- Keys map to a `Command` (pure, native), and `Nav.apply` applies it: zoom and pan go through Viewport's `View.step`, so keys and pointer share one path. The host reports changes as `inkproof-view` and `inkproof-cursor` events and announces them in a polite live region; the application answers a view change with a new scene. Keys with modifiers, and keys the chart does not use, are left to the browser.
+
 ## Building an application
 
 An application's `package.json` depends on `gpu-js` (the module `inkproof-gpu-js`, a copy of the interpreter the pinned Gpu release generates, written by `scripts/gpu-module.sh <dir>` and checked by the tests) and on `shim/inkproof-web-element` (the shim below), both by `file:` path. Lasm resolves them through Vite and `@lasm/cli/vite`; a static `lasm build` cannot resolve npm modules. `test/` is a working example.

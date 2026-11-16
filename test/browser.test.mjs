@@ -189,3 +189,86 @@ test('a tile query sums the tiles it touches and leaves the main thread free', a
   assert.ok(messages.some(m => m.type === 'warning' && m.text.includes('fetching a tile failed') && m.text.includes('tiles/4.bin')), JSON.stringify(messages));
   await context.close();
 });
+
+const keyed = async (page, ...keys) => {
+  await page.evaluate(() => {
+    window.views = []; window.cursors = [];
+    const el = document.querySelector('inkproof-accessible-chart');
+    el.addEventListener('inkproof-view', e => window.views.push(e.detail));
+    el.addEventListener('inkproof-cursor', e => window.cursors.push(e.detail));
+  });
+  await page.locator('inkproof-accessible-chart').focus();
+  for (const key of keys) await page.keyboard.press(key);
+};
+const announced = page => page.evaluate(() => document.querySelector('inkproof-accessible-chart').shadowRoot.querySelector('[aria-live]').textContent);
+
+test('the chart can be focused and zoomed and panned from the keyboard alone', async () => {
+  const { page, context } = await open('/accessible.html');
+  await drawn(page, 1);
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.localName), 'inkproof-accessible-chart');
+  await keyed(page, '+');
+  let [view] = await page.evaluate(() => window.views);
+  assert.ok(view.xEnd - view.xStart < 100, 'zoom in narrows the range');
+  await keyed(page, 'ArrowRight');
+  const views = await page.evaluate(() => window.views);
+  assert.ok(views.at(-1).xStart > 0, 'pan right moves the range');
+  await keyed(page, '-', 'Escape');
+  assert.deepEqual((await page.evaluate(() => window.views)).at(-1), { xStart: 0, xEnd: 100, yStart: 0, yEnd: 100 });
+  await context.close();
+});
+
+test('the cursor moves within the points and the series is selectable from the keyboard', async () => {
+  const { page, context } = await open('/accessible.html');
+  await drawn(page, 1);
+  await keyed(page, 'Shift+ArrowRight', 'Shift+ArrowRight', 'End', 'Shift+ArrowRight');
+  let cursors = await page.evaluate(() => window.cursors);
+  assert.deepEqual(cursors.map(c => c.point), [1, 2, 4]);
+  await keyed(page, 'Home', 'Shift+ArrowLeft', 'PageDown');
+  cursors = await page.evaluate(() => window.cursors);
+  assert.deepEqual(cursors.at(-1), { series: 1, point: 0 });
+  assert.match(await announced(page), /South/);
+  await keyed(page, 'PageDown');
+  assert.equal((await page.evaluate(() => window.cursors)).at(-1).series, 0);
+  await context.close();
+});
+
+test('keys the chart does not use are left to the browser', async () => {
+  const { page, context } = await open('/accessible.html');
+  await drawn(page, 1);
+  await keyed(page);
+  const prevented = await page.evaluate(() => new Promise(resolve => {
+    const el = document.querySelector('inkproof-accessible-chart');
+    const event = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true });
+    el.dispatchEvent(event);
+    resolve(event.defaultPrevented);
+  }));
+  assert.equal(prevented, false);
+  await context.close();
+});
+
+test('the chart has an accessible name and a summary naming its series and range', async () => {
+  const { page, context } = await open('/accessible.html');
+  await drawn(page, 1);
+  await page.waitForFunction(() => document.querySelector('inkproof-accessible-chart').hasAttribute('aria-description'));
+  const cdp = await context.newCDPSession(page);
+  const { nodes } = await cdp.send('Accessibility.getFullAXTree');
+  const chart = nodes.find(n => n.name?.value === 'Sales');
+  assert.ok(chart, 'no accessible node named Sales');
+  assert.match(chart.description?.value ?? '', /North.*South.*0 to 100/);
+  await keyed(page, '+');
+  assert.match(await page.evaluate(() => document.querySelector('inkproof-accessible-chart').getAttribute('aria-description')), /showing 25 to 75/);
+  await context.close();
+});
+
+test('the data is available as a table that can be shown', async () => {
+  const { page, context } = await open('/accessible.html');
+  await drawn(page, 1);
+  const cells = () => page.evaluate(() => [...document.querySelector('inkproof-accessible-chart').shadowRoot.querySelectorAll('table td')].map(c => c.textContent));
+  assert.deepEqual(await cells(), ['Jan', '1', '2', 'Feb', '3', '4']);
+  const shown = () => page.evaluate(() => { const t = document.querySelector('inkproof-accessible-chart').shadowRoot.querySelector('table').parentElement; return t.getBoundingClientRect().height > 2; });
+  assert.equal(await shown(), false);
+  await page.evaluate(() => document.querySelector('inkproof-accessible-chart').setAttribute('show-table', ''));
+  assert.equal(await shown(), true);
+  await context.close();
+});

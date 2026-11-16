@@ -1,3 +1,16 @@
+structure Inkproof.Web.Access : Type
+def Inkproof.Web.Access.cursorText : Inkproof.Web.Access → Inkproof.Web.Nav → String
+theorem Inkproof.Web.Access.cursorText_eq : ∀ (a : Inkproof.Web.Access) (n : Inkproof.Web.Nav), a.cursorText n = ToString.toString (a.series[n.series]?.getD (ToString.toString "series " ++ ToString.toString (n.series + 1))) ++ ToString.toString ", point " ++ ToString.toString (n.point + 1) ++ ToString.toString " of " ++ ToString.toString a.points
+field Inkproof.Web.Access.header : Inkproof.Web.Access → Array String
+constructor Inkproof.Web.Access.mk : String → Array String → Nat → Option String → Array String → Array (Array String) → Option (Inkproof.Viewport.ViewConfig Float) → Inkproof.Web.Access
+field Inkproof.Web.Access.name : Inkproof.Web.Access → String
+field Inkproof.Web.Access.points : Inkproof.Web.Access → Nat
+field Inkproof.Web.Access.rows : Inkproof.Web.Access → Array (Array String)
+field Inkproof.Web.Access.series : Inkproof.Web.Access → Array String
+field Inkproof.Web.Access.summary : Inkproof.Web.Access → Option String
+def Inkproof.Web.Access.summaryText : Inkproof.Web.Access → Option (Inkproof.Viewport.View Float) → String
+theorem Inkproof.Web.Access.summaryText_some : ∀ (a : Inkproof.Web.Access) (s : String) (v : Option (Inkproof.Viewport.View Float)), a.summary = Option.some s → a.summaryText v = s
+field Inkproof.Web.Access.view : Inkproof.Web.Access → Option (Inkproof.Viewport.ViewConfig Float)
 structure Inkproof.Web.ChartAttrs : Type
 field Inkproof.Web.ChartAttrs.logLevel : Inkproof.Web.ChartAttrs → Option Inkproof.Web.Level
 constructor Inkproof.Web.ChartAttrs.mk : String → Option Inkproof.Web.Level → Inkproof.Web.ChartAttrs
@@ -5,6 +18,18 @@ def Inkproof.Web.ChartAttrs.parse : Option String → Option String → Except S
 theorem Inkproof.Web.ChartAttrs.parse_missing_src : ∀ (l : Option String), ∃ e, Inkproof.Web.ChartAttrs.parse Option.none l = Except.error e
 theorem Inkproof.Web.ChartAttrs.parse_ok : ∀ {s : String}, s ≠ "" → ∀ (l : Option Inkproof.Web.Level), Inkproof.Web.ChartAttrs.parse (Option.some s) (Option.map Inkproof.Web.Level.name l) = Except.ok { src := s, logLevel := l }
 field Inkproof.Web.ChartAttrs.src : Inkproof.Web.ChartAttrs → String
+inductive Inkproof.Web.Command : Type
+constructor Inkproof.Web.Command.cursorFirst : Inkproof.Web.Command
+constructor Inkproof.Web.Command.cursorLast : Inkproof.Web.Command
+constructor Inkproof.Web.Command.cursorLeft : Inkproof.Web.Command
+constructor Inkproof.Web.Command.cursorRight : Inkproof.Web.Command
+constructor Inkproof.Web.Command.nextSeries : Inkproof.Web.Command
+def Inkproof.Web.Command.ofKey : String → Bool → Option Inkproof.Web.Command
+theorem Inkproof.Web.Command.ofKey_arrows : Inkproof.Web.Command.ofKey "ArrowLeft" Bool.true = Option.some Inkproof.Web.Command.cursorLeft ∧ Inkproof.Web.Command.ofKey "ArrowRight" Bool.true = Option.some Inkproof.Web.Command.cursorRight ∧ Inkproof.Web.Command.ofKey "ArrowLeft" Bool.false = Option.some (Inkproof.Web.Command.view Inkproof.Viewport.Key.left) ∧ Inkproof.Web.Command.ofKey "ArrowRight" Bool.false = Option.some (Inkproof.Web.Command.view Inkproof.Viewport.Key.right)
+theorem Inkproof.Web.Command.ofKey_tab : ∀ (shift : Bool), Inkproof.Web.Command.ofKey "Tab" shift = Option.none
+constructor Inkproof.Web.Command.previousSeries : Inkproof.Web.Command
+constructor Inkproof.Web.Command.reset : Inkproof.Web.Command
+constructor Inkproof.Web.Command.view : Inkproof.Viewport.Key → Inkproof.Web.Command
 structure Inkproof.Web.Frame : Type
 field Inkproof.Web.Frame.dirty : Inkproof.Web.Frame → Bool
 def Inkproof.Web.Frame.drawn : Inkproof.Web.Frame → Inkproof.Web.Frame
@@ -34,6 +59,24 @@ def Inkproof.Web.Level.rank : Inkproof.Web.Level → Nat
 constructor Inkproof.Web.Level.warn : Inkproof.Web.Level
 theorem Inkproof.Web.Level.warn_enabled_by_default : Inkproof.Web.Level.warn.enabled Inkproof.Web.Level.defaultThreshold = Bool.true
 def Inkproof.Web.Milli : Type
+structure Inkproof.Web.Nav : Type
+def Inkproof.Web.Nav.apply : Inkproof.Web.NavConfig → Inkproof.Web.Nav → Inkproof.Web.Command → Inkproof.Web.Nav
+theorem Inkproof.Web.Nav.apply_point_lt : ∀ (c : Inkproof.Web.NavConfig) (n : Inkproof.Web.Nav), n.point < c.points → ∀ (cmd : Inkproof.Web.Command), (Inkproof.Web.Nav.apply c n cmd).point < c.points
+theorem Inkproof.Web.Nav.apply_reset : ∀ (c : Inkproof.Web.NavConfig) (n : Inkproof.Web.Nav), Inkproof.Web.Nav.apply c n Inkproof.Web.Command.reset = Inkproof.Web.Nav.home c
+theorem Inkproof.Web.Nav.apply_series_lt : ∀ (c : Inkproof.Web.NavConfig) (n : Inkproof.Web.Nav), n.series < c.series → ∀ (cmd : Inkproof.Web.Command), (Inkproof.Web.Nav.apply c n cmd).series < c.series
+theorem Inkproof.Web.Nav.apply_view : ∀ (c : Inkproof.Web.NavConfig) (n : Inkproof.Web.Nav) (k : Inkproof.Viewport.Key), (Inkproof.Web.Nav.apply c n (Inkproof.Web.Command.view k)).view = Inkproof.Viewport.View.step c.view n.view (Inkproof.Viewport.Input.key k)
+def Inkproof.Web.Nav.home : Inkproof.Web.NavConfig → Inkproof.Web.Nav
+theorem Inkproof.Web.Nav.home_cursor : ∀ (c : Inkproof.Web.NavConfig), (Inkproof.Web.Nav.home c).point = 0 ∧ (Inkproof.Web.Nav.home c).series = 0
+theorem Inkproof.Web.Nav.home_view : ∀ (c : Inkproof.Web.NavConfig), (Inkproof.Web.Nav.home c).view = Inkproof.Viewport.View.home c.view
+constructor Inkproof.Web.Nav.mk : Inkproof.Viewport.View Float → Nat → Nat → Inkproof.Web.Nav
+field Inkproof.Web.Nav.point : Inkproof.Web.Nav → Nat
+field Inkproof.Web.Nav.series : Inkproof.Web.Nav → Nat
+field Inkproof.Web.Nav.view : Inkproof.Web.Nav → Inkproof.Viewport.View Float
+structure Inkproof.Web.NavConfig : Type
+constructor Inkproof.Web.NavConfig.mk : Inkproof.Viewport.ViewConfig Float → Nat → Nat → Inkproof.Web.NavConfig
+field Inkproof.Web.NavConfig.points : Inkproof.Web.NavConfig → Nat
+field Inkproof.Web.NavConfig.series : Inkproof.Web.NavConfig → Nat
+field Inkproof.Web.NavConfig.view : Inkproof.Web.NavConfig → Inkproof.Viewport.ViewConfig Float
 structure Inkproof.Web.Size : Type
 def Inkproof.Web.Size.backing : Nat → Nat → Inkproof.Web.Milli → Inkproof.Web.Size
 theorem Inkproof.Web.Size.backing_height : ∀ (w h : Nat) (ratio : Inkproof.Web.Milli), (Inkproof.Web.Size.backing w h ratio).height = Inkproof.Web.backingPx h ratio
@@ -59,11 +102,17 @@ def Inkproof.Web.backingPx : Nat → Inkproof.Web.Milli → Nat
 theorem Inkproof.Web.backingPx_close : ∀ {css : Nat} (ratio : Inkproof.Web.Milli), 1000 ≤ css * ratio + 500 → css ≠ 0 → Inkproof.Web.backingPx css ratio * 1000 ≤ css * ratio + 500 ∧ css * ratio < Inkproof.Web.backingPx css ratio * 1000 + 500
 theorem Inkproof.Web.backingPx_pos : ∀ {css : Nat}, 0 < css → ∀ (ratio : Inkproof.Web.Milli), 0 < Inkproof.Web.backingPx css ratio
 theorem Inkproof.Web.backingPx_zero : ∀ (ratio : Inkproof.Web.Milli), Inkproof.Web.backingPx 0 ratio = 0
+def Inkproof.Web.describe : String → Array String → Float → Float → String
+theorem Inkproof.Web.describe_eq : ∀ (name : String) (series : Array String) (xStart xEnd : Float), Inkproof.Web.describe name series xStart xEnd = ToString.toString name ++ ToString.toString ": " ++ ToString.toString series.size ++ ToString.toString " series (" ++ ToString.toString (", ".intercalate series.toList) ++ ToString.toString "), showing " ++ ToString.toString (Inkproof.Web.showFloat xStart) ++ ToString.toString " to " ++ ToString.toString (Inkproof.Web.showFloat xEnd)
 def Inkproof.Web.formatLine : Inkproof.Web.Level → String → List (String × String) → String
 theorem Inkproof.Web.formatLine_eq : ∀ (l : Inkproof.Web.Level) (m : String) (values : List (String × String)), Inkproof.Web.formatLine l m values = " ".intercalate ((ToString.toString "[inkproof " ++ ToString.toString l.name ++ ToString.toString "] " ++ ToString.toString m) :: List.map (fun x => match x with | (k, v) => ToString.toString k ++ ToString.toString "=" ++ ToString.toString v) values)
 theorem Inkproof.Web.formatLine_nil : ∀ (l : Inkproof.Web.Level) (m : String), Inkproof.Web.formatLine l m [] = ToString.toString "[inkproof " ++ ToString.toString l.name ++ ToString.toString "] " ++ ToString.toString m
+instance Inkproof.Web.instBEqNav : BEq Inkproof.Web.Nav
+def Inkproof.Web.instBEqNav.beq : Inkproof.Web.Nav → Inkproof.Web.Nav → Bool
 instance Inkproof.Web.instDecidableEqChartAttrs : DecidableEq Inkproof.Web.ChartAttrs
 def Inkproof.Web.instDecidableEqChartAttrs.decEq : (x x_1 : Inkproof.Web.ChartAttrs) → Decidable (x = x_1)
+instance Inkproof.Web.instDecidableEqCommand : DecidableEq Inkproof.Web.Command
+def Inkproof.Web.instDecidableEqCommand.decEq : (x x_1 : Inkproof.Web.Command) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqFrame : DecidableEq Inkproof.Web.Frame
 def Inkproof.Web.instDecidableEqFrame.decEq : (x x_1 : Inkproof.Web.Frame) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqLevel : DecidableEq Inkproof.Web.Level
@@ -75,9 +124,15 @@ instance Inkproof.Web.instInhabitedTextCache : Inhabited Inkproof.Web.TextCache
 def Inkproof.Web.instInhabitedTextCache.default : Inkproof.Web.TextCache
 instance Inkproof.Web.instReprChartAttrs : Repr Inkproof.Web.ChartAttrs
 def Inkproof.Web.instReprChartAttrs.repr : Inkproof.Web.ChartAttrs → Nat → Std.Format
+instance Inkproof.Web.instReprCommand : Repr Inkproof.Web.Command
+def Inkproof.Web.instReprCommand.repr : Inkproof.Web.Command → Nat → Std.Format
 instance Inkproof.Web.instReprFrame : Repr Inkproof.Web.Frame
 def Inkproof.Web.instReprFrame.repr : Inkproof.Web.Frame → Nat → Std.Format
 instance Inkproof.Web.instReprLevel : Repr Inkproof.Web.Level
 def Inkproof.Web.instReprLevel.repr : Inkproof.Web.Level → Nat → Std.Format
+instance Inkproof.Web.instReprNav : Repr Inkproof.Web.Nav
+def Inkproof.Web.instReprNav.repr : Inkproof.Web.Nav → Nat → Std.Format
 instance Inkproof.Web.instReprSize : Repr Inkproof.Web.Size
 def Inkproof.Web.instReprSize.repr : Inkproof.Web.Size → Nat → Std.Format
+def Inkproof.Web.showFloat : Float → String
+theorem Inkproof.Web.showFloat_eq : ∀ (f : Float), Inkproof.Web.showFloat f = if (ToString.toString f).contains '.' = Bool.true then (((ToString.toString f).dropEndWhile fun x => x == '0').dropEndWhile fun x => x == '.').toString else ToString.toString f
