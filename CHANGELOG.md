@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.1]
+
+- Interprets Gpu v0.5.0's scissor command; requires Gpu v0.5.0.
+
 ## [0.4.0]
 
 - Keyboard control (zoom, pan, cursor, series) and accessible summaries and data tables on the chart element.

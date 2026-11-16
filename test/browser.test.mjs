@@ -77,6 +77,18 @@ test('a triangle is drawn from the command list', async () => {
   await context.close();
 });
 
+test('a scissor command clips the draw', async () => {
+  const { page, context, messages } = await open('/index.html');
+  await drawn(page, 1);
+  const at = await page.evaluate(([x, y]) => {
+    const canvas = document.querySelector('inkproof-chart').shadowRoot.querySelector('canvas');
+    return [...canvas.getContext('2d').getImageData(x, y, 1, 1).data];
+  }, [150, 190]);
+  assert.deepEqual(at, [255, 128, 0, 255]);
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
 test('nothing is redrawn when nothing changed', async () => {
   const { page, context } = await open('/index.html');
   await drawn(page, 1);

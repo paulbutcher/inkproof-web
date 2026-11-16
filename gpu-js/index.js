@@ -50,6 +50,7 @@ function decodeCommand(r) {
     case 5: return { op: 5, name: "draw", args: [r.u32(), r.u32()] };
     case 6: return { op: 6, name: "clear", args: [r.u32()] };
     case 7: return { op: 7, name: "createProgram", args: [r.u32()] };
+    case 8: return { op: 8, name: "scissor", args: [r.words()] };
     default: throw new Error("unknown command");
   }
 }
@@ -109,6 +110,12 @@ export function run(gl, s, bytes) {
     }
     case 7: {
       s.programs.set(a[0], buildProgram(gl));
+      break;
+    }
+    case 8: {
+      const w = new Int32Array(a[0].buffer);
+      if (w.length === 4) { gl.enable(gl.SCISSOR_TEST); gl.scissor(w[0], w[1], w[2], w[3]); }
+      else { gl.disable(gl.SCISSOR_TEST); }
       break;
     }
     }
