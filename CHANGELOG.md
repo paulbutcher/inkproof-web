@@ -1,9 +1,12 @@
 # Changelog
 
+## [0.4.3]
+
+- Adds `Host.queryColumns`, per-column aggregates over a tiled pyramid; requires Core v0.11.0.
+
 ## [0.4.2]
 
 - Adds `Host.fetchTile`, fetching a tile with an optional byte range; `queryTiles` uses it.
-- Adds `Host.queryColumns`, per-column aggregates over a tiled pyramid; requires Core v0.11.0.
 
 ## [0.4.1]
 
