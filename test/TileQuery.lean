@@ -80,4 +80,18 @@ def main : IO Unit := do
     timed "tMany" <| discard <| Std.Async.Async.concurrentlyAll <| (Array.range 8).map fun _ => do
       for st in [0:30] do
         discard <| queryTiles (M := Total Nat) 4 (by decide) (fun t => s!"tiles/{t}.bin?many{st}") decode 0 16 (some many)
+    let stationUrl := fun (tag : String) (s t : Nat) => s!"tiles/{t % 4}.bin?{tag}{s}-{t}"
+    let charts := fun (act : Nat → Nat → Async Unit) => Std.Async.Async.concurrentlyAll <| (Array.range 8).map fun _ => do
+      for s in [0:4] do act s 0
+    let drawPlain : Async Unit := discard <| charts fun s _ => do
+      for t in [0:30] do
+        match decode (← fetchTile (stationUrl "plain" s t)) with
+        | .ok _ => pure ()
+        | .error e => throw (IO.userError e)
+    let drawShared : Async Unit := do
+      let shared : TileCache (Total Nat) ← TileCache.new 512
+      discard <| charts fun s _ => discard <|
+        queryTiles (M := Total Nat) 4 (by decide) (stationUrl "draw" s) decode 0 120 (some shared)
+    timed "tPlain" drawPlain
+    timed "tDraw" drawShared
     body.callMethod "setAttribute" #[toJS "done", toJS "true"] Unit : Async Unit)

@@ -197,7 +197,7 @@ test('a tile query sums the tiles it touches and leaves the main thread free', a
   page.on('request', r => requests.push(r.url()));
   await page.evaluate(() => { window.ticks = 0; const tick = () => { window.ticks++; setTimeout(tick, 0); }; tick(); });
   await page.waitForFunction(() => document.body.hasAttribute('done'));
-  const attrs = await page.evaluate(() => ({ sum: document.body.getAttribute('sum'), missing: document.body.getAttribute('missing'), range: document.body.getAttribute('range'), columns: document.body.getAttribute('columns'), raw: document.body.getAttribute('raw'), cached: document.body.getAttribute('cached'), yields: document.body.getAttribute('yields'), shared: document.body.getAttribute('shared'), ms: Object.fromEntries(['tUncached', 'tCached', 'tMany'].map(n => [n, Number(document.body.getAttribute(n))])), ticks: window.ticks }));
+  const attrs = await page.evaluate(() => ({ sum: document.body.getAttribute('sum'), missing: document.body.getAttribute('missing'), range: document.body.getAttribute('range'), columns: document.body.getAttribute('columns'), raw: document.body.getAttribute('raw'), cached: document.body.getAttribute('cached'), yields: document.body.getAttribute('yields'), shared: document.body.getAttribute('shared'), ms: Object.fromEntries(['tUncached', 'tCached', 'tMany', 'tPlain', 'tDraw'].map(n => [n, Number(document.body.getAttribute(n))])), ticks: window.ticks }));
   let expected = 0;
   for (let i = 2; i < 14; i++) expected += i * 3 + 1;
   assert.equal(attrs.sum, String(expected));
@@ -210,6 +210,7 @@ test('a tile query sums the tiles it touches and leaves the main thread free', a
   assert.equal(attrs.raw, `#[${leafSum(10, 13)}, ${leafSum(13, 16)}, ${leafSum(16, 20)}]`);
   assert.ok(attrs.ms.tUncached < 50 && attrs.ms.tCached < 50, `a query over 4 tiles waits idle: ${JSON.stringify(attrs.ms)}`);
   assert.ok(attrs.ms.tMany < 400, `eight concurrent queries over 120 tiles wait idle: ${JSON.stringify(attrs.ms)}`);
+  assert.ok(attrs.ms.tDraw < 1.5 * attrs.ms.tPlain, `eight charts of four stations over a shared cache take longer than plain fetches: ${JSON.stringify(attrs.ms)}`);
   assert.ok(attrs.ticks > 0);
   assert.ok(Number(attrs.yields) < 30, `a cached query over 120 tiles yielded ${attrs.yields} times, once per tile rather than per 8 ms of work`);
   const fetched = tag => requests.filter(u => u.endsWith('?' + tag)).map(u => u.split('/').pop());
