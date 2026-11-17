@@ -192,11 +192,12 @@ test('a tile query sums the tiles it touches and leaves the main thread free', a
   const { page, context, messages } = await open('/tiles.html');
   await page.evaluate(() => { window.ticks = 0; const tick = () => { window.ticks++; setTimeout(tick, 0); }; tick(); });
   await page.waitForFunction(() => document.body.hasAttribute('done'));
-  const attrs = await page.evaluate(() => ({ sum: document.body.getAttribute('sum'), missing: document.body.getAttribute('missing'), ticks: window.ticks }));
+  const attrs = await page.evaluate(() => ({ sum: document.body.getAttribute('sum'), missing: document.body.getAttribute('missing'), range: document.body.getAttribute('range'), ticks: window.ticks }));
   let expected = 0;
   for (let i = 2; i < 14; i++) expected += i * 3 + 1;
   assert.equal(attrs.sum, String(expected));
   assert.match(attrs.missing, /^error/);
+  assert.equal(attrs.range, 'true');
   assert.ok(attrs.ticks > 0);
   assert.ok(messages.some(m => m.type === 'warning' && m.text.includes('fetching a tile failed') && m.text.includes('tiles/4.bin')), JSON.stringify(messages));
   await context.close();

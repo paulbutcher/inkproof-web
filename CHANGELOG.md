@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.2]
+
+- Adds `Host.fetchTile`, fetching a tile with an optional byte range; `queryTiles` uses it.
+
 ## [0.4.1]
 
 - Interprets Gpu v0.5.0's scissor command; requires Gpu v0.5.0.

@@ -21,4 +21,10 @@ def main : IO Unit := do
         body.callMethod "setAttribute" #[toJS name, toJS (toString total.get)] Unit
       catch e =>
         body.callMethod "setAttribute" #[toJS name, toJS s!"error: {e}"] Unit
+    try
+      let whole ← fetchTile "tiles/1.bin"
+      let part ← fetchTile "tiles/1.bin" (some (1, 2))
+      body.callMethod "setAttribute" #[toJS "range", toJS (toString (part == whole.extract 1 3))] Unit
+    catch e =>
+      body.callMethod "setAttribute" #[toJS "range", toJS s!"error: {e}"] Unit
     body.callMethod "setAttribute" #[toJS "done", toJS "true"] Unit : Async Unit)
