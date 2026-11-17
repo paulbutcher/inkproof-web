@@ -40,4 +40,22 @@ def main : IO Unit := do
       body.callMethod "setAttribute" #[toJS "range", toJS (toString (part == whole.extract 1 3))] Unit
     catch e =>
       body.callMethod "setAttribute" #[toJS "range", toJS s!"error: {e}"] Unit
+    try
+      let cache ← TileCache.new 8
+      let url := fun (_ t : Nat) => s!"tiles/{t}.bin?cached"
+      let a ← queryTiles (M := Total Nat) 4 (by decide) (url 0) decode 2 14 (some cache)
+      let cols ← queryColumns (M := Total Nat) 4 (by decide) 2 1 url decode 2 14 4 (some cache)
+      let b ← queryTiles (M := Total Nat) 4 (by decide) (url 0) decode 2 14 (some cache)
+      body.callMethod "setAttribute" #[toJS "cached", toJS s!"{a.get} {cols.map (·.get)} {b.get}"] Unit
+    catch e =>
+      body.callMethod "setAttribute" #[toJS "cached", toJS s!"error: {e}"] Unit
+    let small ← TileCache.new 1
+    for _ in [0:2] do
+      discard <| queryTiles (M := Total Nat) 4 (by decide) (fun t => s!"tiles/{t}.bin?small") decode 4 12 (some small)
+    let bad ← TileCache.new 4
+    for _ in [0:2] do
+      try
+        discard <| queryTiles (M := Total Nat) 4 (by decide) (fun t => s!"tiles/{t}.bin?bad") decode 16 20 (some bad)
+      catch _ =>
+        pure ()
     body.callMethod "setAttribute" #[toJS "done", toJS "true"] Unit : Async Unit)

@@ -43,6 +43,65 @@ def fetchTile (src : String) (range : Option (Nat × Nat) := none) : Async ByteA
     log .warn s!"fetching a tile failed: {e}" [("src", src)]
     throw e
 
+/-- At most `capacity` entries, the least recently used first. -/
+structure Lru (κ α : Type) where
+  capacity : Nat
+  entries : Array (κ × α) := #[]
+
+namespace Lru
+variable {κ α : Type} [BEq κ]
+
+/-- The value stored under `k`, which becomes the most recently used entry. -/
+def find? (c : Lru κ α) (k : κ) : Option α × Lru κ α :=
+  match c.entries.find? (·.1 == k) with
+  | none => (none, c)
+  | some e => (some e.2, { c with entries := (c.entries.filter (·.1 != k)).push e })
+
+theorem find?_fst (c : Lru κ α) (k : κ) : (c.find? k).1 = (c.entries.find? (·.1 == k)).map (·.2) := by
+  unfold find?
+  cases h : c.entries.find? (·.1 == k) <;> simp
+
+/-- Stores `v` under `k` as the most recently used entry, dropping the least recently used entries beyond `capacity`. -/
+def insert (c : Lru κ α) (k : κ) (v : α) : Lru κ α :=
+  let es := (c.entries.filter (·.1 != k)).push (k, v)
+  { c with entries := es.extract (es.size - c.capacity) es.size }
+
+theorem size_insert_le (c : Lru κ α) (k : κ) (v : α) : (c.insert k v).entries.size ≤ c.capacity := by
+  simp only [insert, Array.size_extract]
+  omega
+
+theorem find?_insert [LawfulBEq κ] (c : Lru κ α) (k : κ) (v : α) (h : 0 < c.capacity) :
+    (c.insert k v).entries.find? (·.1 == k) = some (k, v) := by
+  simp only [insert]
+  have hne : ∀ x ∈ (c.entries.filter (·.1 != k)).toList, (x.1 == k) = false := by
+    intro x hx
+    simp at hx
+    simp [hx.2]
+  generalize c.entries.filter (·.1 != k) = rest at hne
+  rw [← Array.find?_toList]
+  simp only [Array.toList_extract, Array.toList_push, Array.size_push, List.extract_eq_take_drop]
+  rw [List.take_of_length_le (by simp),
+    List.drop_append_of_le_length (by simp; omega), List.find?_append]
+  have : List.find? (fun x => x.fst == k) (List.drop (rest.size + 1 - c.capacity) rest.toList) = none := by
+    rw [List.find?_eq_none]
+    intro x hx
+    simp [hne x (List.mem_of_mem_drop hx)]
+  simp [this]
+
+theorem capacity_find?(c : Lru κ α) (k : κ) : (c.find? k).2.capacity = c.capacity := by
+  unfold find?
+  split <;> rfl
+
+end Lru
+
+/-- Tiles and byte ranges already fetched, shared by queries that are given it, so that one fetch serves them all. It holds at most `capacity` of them, evicting the least recently used. Only a fetch that succeeded is stored, so a failed one is retried (and logged) by the next query. Two queries running at once that miss on the same tile each fetch it. -/
+structure TileCache where
+  private mk ::
+  private store : IO.Ref (Lru (String × Option (Nat × Nat)) ByteArray)
+
+def TileCache.new (capacity : Nat) : IO TileCache :=
+  return { store := ← IO.mkRef { capacity } }
+
 /-- Decodes a fetched tile, logging a body `decode` rejects with the URL it came from and failing. -/
 private def decodeTile {M : Type} (decode : ByteArray → Except String (Array M)) (src : String)
     (body : ByteArray) : Async (Array M) :=
@@ -52,17 +111,30 @@ private def decodeTile {M : Type} (decode : ByteArray → Except String (Array M
     log .warn s!"fetching a tile failed: {e}" [("src", src)]
     throw (IO.userError e)
 
+/-- The decoded tile or range at `src`, fetched with `fetchTile` unless `cache` holds it. Only a body that decodes is stored, so a tile that fails is fetched and logged again by the next query. -/
+private def loadTile {M : Type} (cache : Option TileCache) (decode : ByteArray → Except String (Array M))
+    (src : String) (range : Option (Nat × Nat) := none) : Async (Array M) := do
+  let some c := cache | decodeTile decode src (← fetchTile src range)
+  let (hit, lru) := (← c.store.get).find? (src, range)
+  c.store.set lru
+  if let some body := hit then
+    if let .ok tile := decode body then return tile
+  let body ← fetchTile src range
+  let tile ← decodeTile decode src body
+  c.store.modify (·.insert (src, range) body)
+  return tile
+
 /-- Merge nodes `lo` to `hi - 1` of a level stored as tiles of `n` nodes at `url t`, decoding each tile body with `decode`. Fetching is asynchronous and control returns to the event loop after every tile, so the main thread is never blocked; a tile that fails is logged with its URL and fails the query. -/
 def queryTiles {M : Type} [Aggregate M] (n : Nat) (hn : 0 < n) (url : Nat → String)
-    (decode : ByteArray → Except String (Array M)) (lo hi : Nat) : Async M :=
-  Aggregate.foldTilesM n hn (fun t => do decodeTile decode (url t) (← fetchTile (url t))) yieldToEventLoop lo hi
+    (decode : ByteArray → Except String (Array M)) (lo hi : Nat) (cache : Option TileCache := none) : Async M :=
+  Aggregate.foldTilesM n hn (fun t => do loadTile cache decode (url t)) yieldToEventLoop lo hi
 
-/-- The aggregates of `cols` equal columns of the leaves `[lo, hi)` of a pyramid of `numLevels` levels with the given `branching`, whose tile `t` of level `k` is at `url k t`. Each tile is fetched once, with `fetchTile`, and control returns to the event loop after every tile; a tile that fails is logged with its URL and fails the query. -/
+/-- The aggregates of `cols` equal columns of the leaves `[lo, hi)` of a pyramid of `numLevels` levels with the given `branching`, whose tile `t` of level `k` is at `url k t`. Each tile is fetched once, with `fetchTile` unless `cache` holds it, and control returns to the event loop after every tile; a tile that fails is logged with its URL and fails the query. -/
 def queryColumns {M : Type} [Aggregate M] (n : Nat) (hn : 0 < n) (branching numLevels : Nat)
     (url : Nat → Nat → String) (decode : ByteArray → Except String (Array M))
-    (lo hi cols : Nat) : Async (Array M) :=
+    (lo hi cols : Nat) (cache : Option TileCache := none) : Async (Array M) :=
   Pyramid.columnsM n hn branching numLevels
-    (fun k t => do decodeTile decode (url k t) (← fetchTile (url k t))) yieldToEventLoop lo hi cols
+    (fun k t => do loadTile cache decode (url k t)) yieldToEventLoop lo hi cols
 
 /-- The leaves `[lo, hi)` as one array from `parts`, each the leaves starting at the leaf index in its first component. Leaves no part covers are `Aggregate.empty`, so a gap contributes nothing. -/
 def denseLeaves {M : Type} [Aggregate M] (parts : Array (Nat × Array M)) (lo hi : Nat) : Array M :=
@@ -181,13 +253,13 @@ structure RawRange where
 def queryColumnsFrom {M : Type} [Aggregate M] (n : Nat) (hn : 0 < n) (branching numLevels k0 : Nat)
     (url : Nat → Nat → String) (decode : ByteArray → Except String (Array M))
     (source : Nat → Nat → Array RawRange) (decodeLeaves : ByteArray → Except String (Array M))
-    (lo hi cols : Nat) : Async (Array M) :=
+    (lo hi cols : Nat) (cache : Option TileCache := none) : Async (Array M) :=
   columnsRawM n hn branching numLevels k0
-    (fun k t => do decodeTile decode (url k t) (← fetchTile (url k t))) yieldToEventLoop
+    (fun k t => do loadTile cache decode (url k t)) yieldToEventLoop
     (fun lo hi => do
       let mut parts := #[]
       for r in source lo hi do
-        let leaves ← decodeTile decodeLeaves r.url (← fetchTile r.url (some (r.start, r.len)))
+        let leaves ← loadTile cache decodeLeaves r.url (some (r.start, r.len))
         parts := parts.push (r.first, leaves)
         yieldToEventLoop
       pure parts) lo hi cols

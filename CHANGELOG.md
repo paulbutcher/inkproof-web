@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.5]
+
+- Adds `Host.TileCache`, a bounded least-recently-used cache of fetched tiles that `queryTiles`, `queryColumns` and `queryColumnsFrom` take as an optional argument.
+
 ## [0.4.4]
 
 - Adds `Host.queryColumnsFrom`, per-column aggregates over a pyramid stored from level `k0`, with the leaves read from raw files by byte range.

@@ -190,9 +190,11 @@ test('labels from Axis are drawn over the data layer and measured once', async (
 
 test('a tile query sums the tiles it touches and leaves the main thread free', async () => {
   const { page, context, messages } = await open('/tiles.html');
+  const requests = [];
+  page.on('request', r => requests.push(r.url()));
   await page.evaluate(() => { window.ticks = 0; const tick = () => { window.ticks++; setTimeout(tick, 0); }; tick(); });
   await page.waitForFunction(() => document.body.hasAttribute('done'));
-  const attrs = await page.evaluate(() => ({ sum: document.body.getAttribute('sum'), missing: document.body.getAttribute('missing'), range: document.body.getAttribute('range'), columns: document.body.getAttribute('columns'), raw: document.body.getAttribute('raw'), ticks: window.ticks }));
+  const attrs = await page.evaluate(() => ({ sum: document.body.getAttribute('sum'), missing: document.body.getAttribute('missing'), range: document.body.getAttribute('range'), columns: document.body.getAttribute('columns'), raw: document.body.getAttribute('raw'), cached: document.body.getAttribute('cached'), ticks: window.ticks }));
   let expected = 0;
   for (let i = 2; i < 14; i++) expected += i * 3 + 1;
   assert.equal(attrs.sum, String(expected));
@@ -204,6 +206,14 @@ test('a tile query sums the tiles it touches and leaves the main thread free', a
   const leafSum = (a, b) => { let sum = 0; for (let i = a; i < Math.min(b, 16); i++) sum += i * 3 + 1; return sum; };
   assert.equal(attrs.raw, `#[${leafSum(10, 13)}, ${leafSum(13, 16)}, ${leafSum(16, 20)}]`);
   assert.ok(attrs.ticks > 0);
+  const fetched = tag => requests.filter(u => u.endsWith('?' + tag)).map(u => u.split('/').pop());
+  const total = (a, b) => { let sum = 0; for (let i = a; i < b; i++) sum += i * 3 + 1; return sum; };
+  assert.equal(attrs.cached, `${total(2, 14)} #[${columns.join(', ')}] ${total(2, 14)}`);
+  const once = fetched('cached');
+  assert.deepEqual([...once].sort(), ['0.bin?cached', '1.bin?cached', '2.bin?cached', '3.bin?cached'], 'one fetch per tile across three queries');
+  assert.equal(fetched('small').length, 4, 'a one-tile cache evicts: tiles 1 and 2 are fetched again by the second query');
+  assert.equal(fetched('bad').length, 2, 'a failed tile is not cached');
+  assert.ok(messages.filter(m => m.text.includes('tiles/4.bin?bad')).length >= 2, 'a failed tile is logged each time');
   assert.ok(messages.some(m => m.type === 'warning' && m.text.includes('fetching a tile failed') && m.text.includes('tiles/4.bin')), JSON.stringify(messages));
   await context.close();
 });
