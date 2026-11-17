@@ -15,7 +15,7 @@ package «inkproof-web» where
 require «inkproof-gpu» from git "https://github.com/paulbutcher/inkproof-gpu" @ "v0.5.0"
 require «inkproof-viewport» from git "https://github.com/paulbutcher/inkproof-viewport" @ "v0.3.0"
 require «inkproof-axis» from git "https://github.com/paulbutcher/inkproof-axis" @ "v0.5.1"
-require «inkproof-core» from git "https://github.com/paulbutcher/inkproof-core" @ "v0.9.0"
+require «inkproof-core» from git "https://github.com/paulbutcher/inkproof-core" @ "v0.11.0"
 
 @[default_target]
 lean_lib InkproofWeb where

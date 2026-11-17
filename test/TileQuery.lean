@@ -22,6 +22,11 @@ def main : IO Unit := do
       catch e =>
         body.callMethod "setAttribute" #[toJS name, toJS s!"error: {e}"] Unit
     try
+      let cols ← queryColumns (M := Total Nat) 4 (by decide) 2 1 (fun _ t => s!"tiles/{t}.bin") decode 2 14 4
+      body.callMethod "setAttribute" #[toJS "columns", toJS (toString (cols.map (·.get)))] Unit
+    catch e =>
+      body.callMethod "setAttribute" #[toJS "columns", toJS s!"error: {e}"] Unit
+    try
       let whole ← fetchTile "tiles/1.bin"
       let part ← fetchTile "tiles/1.bin" (some (1, 2))
       body.callMethod "setAttribute" #[toJS "range", toJS (toString (part == whole.extract 1 3))] Unit

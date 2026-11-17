@@ -42,14 +42,25 @@ def fetchTile (src : String) (range : Option (Nat × Nat) := none) : Async ByteA
     log .warn s!"fetching a tile failed: {e}" [("src", src)]
     throw e
 
+/-- Decodes a fetched tile, logging a body `decode` rejects with the URL it came from and failing. -/
+private def decodeTile {M : Type} (decode : ByteArray → Except String (Array M)) (src : String)
+    (body : ByteArray) : Async (Array M) :=
+  match decode body with
+  | .ok tile => pure tile
+  | .error e => do
+    log .warn s!"fetching a tile failed: {e}" [("src", src)]
+    throw (IO.userError e)
+
 /-- Merge nodes `lo` to `hi - 1` of a level stored as tiles of `n` nodes at `url t`, decoding each tile body with `decode`. Fetching is asynchronous and control returns to the event loop after every tile, so the main thread is never blocked; a tile that fails is logged with its URL and fails the query. -/
 def queryTiles {M : Type} [Aggregate M] (n : Nat) (hn : 0 < n) (url : Nat → String)
     (decode : ByteArray → Except String (Array M)) (lo hi : Nat) : Async M :=
-  Aggregate.foldTilesM n hn (fun t => do
-    match decode (← fetchTile (url t)) with
-    | .ok tile => pure tile
-    | .error e =>
-      log .warn s!"fetching a tile failed: {e}" [("src", url t)]
-      throw (IO.userError e)) yieldToEventLoop lo hi
+  Aggregate.foldTilesM n hn (fun t => do decodeTile decode (url t) (← fetchTile (url t))) yieldToEventLoop lo hi
+
+/-- The aggregates of `cols` equal columns of the leaves `[lo, hi)` of a pyramid of `numLevels` levels with the given `branching`, whose tile `t` of level `k` is at `url k t`. Each tile is fetched once, with `fetchTile`, and control returns to the event loop after every tile; a tile that fails is logged with its URL and fails the query. -/
+def queryColumns {M : Type} [Aggregate M] (n : Nat) (hn : 0 < n) (branching numLevels : Nat)
+    (url : Nat → Nat → String) (decode : ByteArray → Except String (Array M))
+    (lo hi cols : Nat) : Async (Array M) :=
+  Pyramid.columnsM n hn branching numLevels
+    (fun k t => do decodeTile decode (url k t) (← fetchTile (url k t))) yieldToEventLoop lo hi cols
 
 end Inkproof.Web.Host
