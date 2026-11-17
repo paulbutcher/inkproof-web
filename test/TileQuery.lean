@@ -27,6 +27,14 @@ def main : IO Unit := do
     catch e =>
       body.callMethod "setAttribute" #[toJS "columns", toJS s!"error: {e}"] Unit
     try
+      let source := fun (lo hi : Nat) => (Array.range 4).filterMap fun t =>
+        if lo < 4 * t + 4 ∧ 4 * t < hi then some { url := s!"tiles/{t}.bin", first := 4 * t, start := 0, len := 4 : RawRange }
+        else none
+      let cols ← queryColumnsFrom (M := Total Nat) 4 (by decide) 2 3 2 (fun _ t => s!"tiles/{t}.bin") decode source decode 10 20 3
+      body.callMethod "setAttribute" #[toJS "raw", toJS (toString (cols.map (·.get)))] Unit
+    catch e =>
+      body.callMethod "setAttribute" #[toJS "raw", toJS s!"error: {e}"] Unit
+    try
       let whole ← fetchTile "tiles/1.bin"
       let part ← fetchTile "tiles/1.bin" (some (1, 2))
       body.callMethod "setAttribute" #[toJS "range", toJS (toString (part == whole.extract 1 3))] Unit

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.4]
+
+- Adds `Host.queryColumnsFrom`, per-column aggregates over a pyramid stored from level `k0`, with the leaves read from raw files by byte range.
+
 ## [0.4.3]
 
 - Adds `Host.queryColumns`, per-column aggregates over a tiled pyramid; requires Core v0.11.0.
