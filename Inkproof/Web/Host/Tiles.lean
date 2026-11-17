@@ -20,14 +20,22 @@ def yieldToEventLoop : Async Unit := do
   let promise ← (← (← global).get "Promise").new #[toJS executor]
   promise.await Unit
 
-/-- A yield for one query's steps: it yields to the event loop only once `budgetMs` of work has run since the last yield, so the number of event loop round trips follows the work and not the number of steps. -/
-private def budgetedYield (budgetMs : Float := 8) : Async (Async Unit) := do
-  let now : Async Float := do (← (← global).get "performance").callMethod "now" #[] Float
+/-- A yield for one query's steps: it yields to the event loop only once `budgetMs` of work has run since the last yield, so the number of event loop round trips follows the work and not the number of steps. The clock is read once every `stride` steps, because each read crosses the Lean and JavaScript boundary and steps are far cheaper than the budget. -/
+private def budgetedYield (budgetMs : Float := 8) (stride : Nat := 32) : Async (Async Unit) := do
+  let performance ← (← global).get "performance"
+  let now : Async Float := performance.callMethod "now" #[] Float
   let last ← IO.mkRef (← now)
+  let steps ← IO.mkRef 0
   return do
-    if (← now) - (← last.get) ≥ budgetMs then
-      yieldToEventLoop
-      last.set (← now)
+    let n := (← steps.get) + 1
+    if n < stride then
+      steps.set n
+    else
+      steps.set 0
+      let t ← now
+      if t - (← last.get) ≥ budgetMs then
+        yieldToEventLoop
+        last.set (← now)
 
 /-- The bytes `[start, start + len)` of the resource at `src`, or all of it when `range` is `none`. A server that ignores the `Range` header and answers 200 with the whole body has the range sliced out here. A failure is logged at warn with the URL and rethrown. -/
 def fetchTile (src : String) (range : Option (Nat × Nat) := none) : Async ByteArray := do

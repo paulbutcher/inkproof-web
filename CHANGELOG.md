@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.8]
+
+- Tile queries read the clock once every 32 steps instead of three boundary crossings on every step.
+
 ## [0.4.7]
 
 - Tile queries yield to the event loop after 8 ms of work instead of after every tile.
