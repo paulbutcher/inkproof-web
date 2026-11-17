@@ -62,4 +62,18 @@ def main : IO Unit := do
     let racers ← Std.Async.Async.concurrentlyAll <| (Array.range 6).map fun _ =>
       queryTiles (M := Total Nat) 4 (by decide) (fun t => s!"tiles/{t}.bin?shared") decode 2 14 (some shared)
     body.callMethod "setAttribute" #[toJS "shared", toJS s!"{racers.map (·.get)}"] Unit
+    let now : Async Float := do (← (← global).get "performance").callMethod "now" #[] Float
+    let timed := fun (name : String) (act : Async Unit) => do
+      let t0 ← now
+      act
+      body.callMethod "setAttribute" #[toJS name, toJS (toString ((← now) - t0))] Unit
+    let warm : TileCache (Total Nat) ← TileCache.new 8
+    let warmUrl := fun (t : Nat) => s!"tiles/{t}.bin?timed"
+    discard <| queryTiles (M := Total Nat) 4 (by decide) warmUrl decode 0 16 (some warm)
+    timed "tUncached" <| discard <| queryTiles (M := Total Nat) 4 (by decide) (fun t => s!"tiles/{t}.bin?timed2") decode 0 16
+    timed "tCached" <| discard <| queryTiles (M := Total Nat) 4 (by decide) warmUrl decode 0 16 (some warm)
+    let many : TileCache (Total Nat) ← TileCache.new 512
+    timed "tMany" <| discard <| Std.Async.Async.concurrentlyAll <| (Array.range 8).map fun _ => do
+      for st in [0:30] do
+        discard <| queryTiles (M := Total Nat) 4 (by decide) (fun t => s!"tiles/{t}.bin?many{st}") decode 0 16 (some many)
     body.callMethod "setAttribute" #[toJS "done", toJS "true"] Unit : Async Unit)
