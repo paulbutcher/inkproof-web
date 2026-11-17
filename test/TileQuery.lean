@@ -41,7 +41,7 @@ def main : IO Unit := do
     catch e =>
       body.callMethod "setAttribute" #[toJS "range", toJS s!"error: {e}"] Unit
     try
-      let cache ← TileCache.new 8
+      let cache : TileCache (Total Nat) ← TileCache.new 8
       let url := fun (_ t : Nat) => s!"tiles/{t}.bin?cached"
       let a ← queryTiles (M := Total Nat) 4 (by decide) (url 0) decode 2 14 (some cache)
       let cols ← queryColumns (M := Total Nat) 4 (by decide) 2 1 url decode 2 14 4 (some cache)
@@ -49,13 +49,17 @@ def main : IO Unit := do
       body.callMethod "setAttribute" #[toJS "cached", toJS s!"{a.get} {cols.map (·.get)} {b.get}"] Unit
     catch e =>
       body.callMethod "setAttribute" #[toJS "cached", toJS s!"error: {e}"] Unit
-    let small ← TileCache.new 1
+    let small : TileCache (Total Nat) ← TileCache.new 1
     for _ in [0:2] do
       discard <| queryTiles (M := Total Nat) 4 (by decide) (fun t => s!"tiles/{t}.bin?small") decode 4 12 (some small)
-    let bad ← TileCache.new 4
+    let bad : TileCache (Total Nat) ← TileCache.new 4
     for _ in [0:2] do
       try
         discard <| queryTiles (M := Total Nat) 4 (by decide) (fun t => s!"tiles/{t}.bin?bad") decode 16 20 (some bad)
       catch _ =>
         pure ()
+    let shared : TileCache (Total Nat) ← TileCache.new 8
+    let racers ← Std.Async.Async.concurrentlyAll <| (Array.range 6).map fun _ =>
+      queryTiles (M := Total Nat) 4 (by decide) (fun t => s!"tiles/{t}.bin?shared") decode 2 14 (some shared)
+    body.callMethod "setAttribute" #[toJS "shared", toJS s!"{racers.map (·.get)}"] Unit
     body.callMethod "setAttribute" #[toJS "done", toJS "true"] Unit : Async Unit)

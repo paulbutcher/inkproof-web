@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.6]
+
+- `Host.TileCache` is now `TileCache M`, keeps decoded tiles, and lets queries running at once share one fetch per tile.
+
 ## [0.4.5]
 
 - Adds `Host.TileCache`, a bounded least-recently-used cache of fetched tiles that `queryTiles`, `queryColumns` and `queryColumnsFrom` take as an optional argument.

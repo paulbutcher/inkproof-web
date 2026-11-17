@@ -94,13 +94,14 @@ theorem capacity_find?(c : Lru κ α) (k : κ) : (c.find? k).2.capacity = c.capa
 
 end Lru
 
-/-- Tiles and byte ranges already fetched, shared by queries that are given it, so that one fetch serves them all. It holds at most `capacity` of them, evicting the least recently used. Only a fetch that succeeded is stored, so a failed one is retried (and logged) by the next query. Two queries running at once that miss on the same tile each fetch it. -/
-structure TileCache where
+/-- Decoded tiles and byte ranges, shared by queries that are given it, so that one fetch and one decode serve them all. It holds at most `capacity` of them, evicting the least recently used. Queries running at once that need the same tile share one fetch: the later ones wait for the first. Only a fetch that succeeded and decoded is stored; a failure is logged once by the query that made it and fails each query waiting on it. -/
+structure TileCache (M : Type) where
   private mk ::
-  private store : IO.Ref (Lru (String × Option (Nat × Nat)) ByteArray)
+  private store : IO.Ref (Lru (String × Option (Nat × Nat)) (Array M))
+  private pending : IO.Ref (Array ((String × Option (Nat × Nat)) × IO.Promise (Except String (Array M))))
 
-def TileCache.new (capacity : Nat) : IO TileCache :=
-  return { store := ← IO.mkRef { capacity } }
+def TileCache.new {M : Type} (capacity : Nat) : IO (TileCache M) :=
+  return { store := ← IO.mkRef { capacity }, pending := ← IO.mkRef #[] }
 
 /-- Decodes a fetched tile, logging a body `decode` rejects with the URL it came from and failing. -/
 private def decodeTile {M : Type} (decode : ByteArray → Except String (Array M)) (src : String)
@@ -111,28 +112,41 @@ private def decodeTile {M : Type} (decode : ByteArray → Except String (Array M
     log .warn s!"fetching a tile failed: {e}" [("src", src)]
     throw (IO.userError e)
 
-/-- The decoded tile or range at `src`, fetched with `fetchTile` unless `cache` holds it. Only a body that decodes is stored, so a tile that fails is fetched and logged again by the next query. -/
-private def loadTile {M : Type} (cache : Option TileCache) (decode : ByteArray → Except String (Array M))
+/-- The decoded tile or range at `src`, fetched with `fetchTile` unless `cache` holds it or is already fetching it. Only a body that decodes is stored, so a tile that fails is fetched and logged again by the next query. -/
+private def loadTile {M : Type} (cache : Option (TileCache M)) (decode : ByteArray → Except String (Array M))
     (src : String) (range : Option (Nat × Nat) := none) : Async (Array M) := do
   let some c := cache | decodeTile decode src (← fetchTile src range)
-  let (hit, lru) := (← c.store.get).find? (src, range)
+  let key := (src, range)
+  let (hit, lru) := (← c.store.get).find? key
   c.store.set lru
-  if let some body := hit then
-    if let .ok tile := decode body then return tile
-  let body ← fetchTile src range
-  let tile ← decodeTile decode src body
-  c.store.modify (·.insert (src, range) body)
-  return tile
+  if let some tile := hit then return tile
+  if let some (_, p) := (← c.pending.get).find? (·.1 == key) then
+    match (← Std.Async.MonadAwait.await p.result? : Option (Except String (Array M))) with
+    | some (.ok tile) => return tile
+    | some (.error e) => throw (IO.userError e)
+    | none => throw (IO.userError s!"fetch of {src} was abandoned")
+  let p ← IO.Promise.new
+  c.pending.modify (·.push (key, p))
+  let outcome ← try
+      let tile ← decodeTile decode src (← fetchTile src range)
+      c.store.modify (·.insert key tile)
+      pure (Except.ok tile)
+    catch e => pure (Except.error (toString e))
+  c.pending.modify (·.filter (·.1 != key))
+  p.resolve outcome
+  match outcome with
+  | .ok tile => return tile
+  | .error e => throw (IO.userError e)
 
 /-- Merge nodes `lo` to `hi - 1` of a level stored as tiles of `n` nodes at `url t`, decoding each tile body with `decode`. Fetching is asynchronous and control returns to the event loop after every tile, so the main thread is never blocked; a tile that fails is logged with its URL and fails the query. -/
 def queryTiles {M : Type} [Aggregate M] (n : Nat) (hn : 0 < n) (url : Nat → String)
-    (decode : ByteArray → Except String (Array M)) (lo hi : Nat) (cache : Option TileCache := none) : Async M :=
+    (decode : ByteArray → Except String (Array M)) (lo hi : Nat) (cache : Option (TileCache M) := none) : Async M :=
   Aggregate.foldTilesM n hn (fun t => do loadTile cache decode (url t)) yieldToEventLoop lo hi
 
 /-- The aggregates of `cols` equal columns of the leaves `[lo, hi)` of a pyramid of `numLevels` levels with the given `branching`, whose tile `t` of level `k` is at `url k t`. Each tile is fetched once, with `fetchTile` unless `cache` holds it, and control returns to the event loop after every tile; a tile that fails is logged with its URL and fails the query. -/
 def queryColumns {M : Type} [Aggregate M] (n : Nat) (hn : 0 < n) (branching numLevels : Nat)
     (url : Nat → Nat → String) (decode : ByteArray → Except String (Array M))
-    (lo hi cols : Nat) (cache : Option TileCache := none) : Async (Array M) :=
+    (lo hi cols : Nat) (cache : Option (TileCache M) := none) : Async (Array M) :=
   Pyramid.columnsM n hn branching numLevels
     (fun k t => do loadTile cache decode (url k t)) yieldToEventLoop lo hi cols
 
@@ -253,7 +267,7 @@ structure RawRange where
 def queryColumnsFrom {M : Type} [Aggregate M] (n : Nat) (hn : 0 < n) (branching numLevels k0 : Nat)
     (url : Nat → Nat → String) (decode : ByteArray → Except String (Array M))
     (source : Nat → Nat → Array RawRange) (decodeLeaves : ByteArray → Except String (Array M))
-    (lo hi cols : Nat) (cache : Option TileCache := none) : Async (Array M) :=
+    (lo hi cols : Nat) (cache : Option (TileCache M) := none) : Async (Array M) :=
   columnsRawM n hn branching numLevels k0
     (fun k t => do loadTile cache decode (url k t)) yieldToEventLoop
     (fun lo hi => do

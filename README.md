@@ -23,6 +23,6 @@ Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser
 - Format numbers and lines of text for those descriptions: `showFloat`, `formatLine`, `describe`.
 - Fetch a tile, or a byte range of a file, with the status checked and a failure logged: `Host.fetchTile`.
 - Aggregate a range of nodes over tiles fetched one at a time without blocking the page: `Host.queryTiles`.
-- Share fetched tiles between queries, bounded and least recently used first: `Host.TileCache.new`, passed to `queryTiles`, `queryColumns` and `queryColumnsFrom`.
+- Share decoded tiles, and in-flight fetches, between concurrent queries, bounded and least recently used first: `Host.TileCache.new`, passed to `queryTiles`, `queryColumns` and `queryColumnsFrom`.
 - Aggregate each of a chart's pixel columns over a tiled pyramid, fetching each tile once: `Host.queryColumns`.
 - The same for a pyramid stored only from level `k0` up, reading the finest zooms from raw files by byte range: `Host.queryColumnsFrom`.
