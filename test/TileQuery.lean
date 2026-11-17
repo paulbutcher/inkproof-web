@@ -72,6 +72,10 @@ def main : IO Unit := do
     discard <| queryTiles (M := Total Nat) 4 (by decide) warmUrl decode 0 16 (some warm)
     timed "tUncached" <| discard <| queryTiles (M := Total Nat) 4 (by decide) (fun t => s!"tiles/{t}.bin?timed2") decode 0 16
     timed "tCached" <| discard <| queryTiles (M := Total Nat) 4 (by decide) warmUrl decode 0 16 (some warm)
+    let yields : Async Nat := do (← global).get "zeroTimeouts" Nat
+    let y0 ← yields
+    discard <| queryTiles (M := Total Nat) 4 (by decide) (fun t => s!"tiles/{t % 4}.bin?timed") decode 0 480 (some warm)
+    body.callMethod "setAttribute" #[toJS "yields", toJS (toString ((← yields) - y0))] Unit
     let many : TileCache (Total Nat) ← TileCache.new 512
     timed "tMany" <| discard <| Std.Async.Async.concurrentlyAll <| (Array.range 8).map fun _ => do
       for st in [0:30] do

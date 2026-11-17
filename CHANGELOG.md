@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.7]
+
+- Tile queries yield to the event loop after 8 ms of work instead of after every tile.
+
 ## [0.4.6]
 
 - `Host.TileCache` is now `TileCache M`, keeps decoded tiles, and lets queries running at once share one fetch per tile.

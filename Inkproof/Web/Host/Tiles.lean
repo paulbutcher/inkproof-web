@@ -20,6 +20,15 @@ def yieldToEventLoop : Async Unit := do
   let promise ← (← (← global).get "Promise").new #[toJS executor]
   promise.await Unit
 
+/-- A yield for one query's steps: it yields to the event loop only once `budgetMs` of work has run since the last yield, so the number of event loop round trips follows the work and not the number of steps. -/
+private def budgetedYield (budgetMs : Float := 8) : Async (Async Unit) := do
+  let now : Async Float := do (← (← global).get "performance").callMethod "now" #[] Float
+  let last ← IO.mkRef (← now)
+  return do
+    if (← now) - (← last.get) ≥ budgetMs then
+      yieldToEventLoop
+      last.set (← now)
+
 /-- The bytes `[start, start + len)` of the resource at `src`, or all of it when `range` is `none`. A server that ignores the `Range` header and answers 200 with the whole body has the range sliced out here. A failure is logged at warn with the URL and rethrown. -/
 def fetchTile (src : String) (range : Option (Nat × Nat) := none) : Async ByteArray := do
   try
@@ -138,17 +147,19 @@ private def loadTile {M : Type} (cache : Option (TileCache M)) (decode : ByteArr
   | .ok tile => return tile
   | .error e => throw (IO.userError e)
 
-/-- Merge nodes `lo` to `hi - 1` of a level stored as tiles of `n` nodes at `url t`, decoding each tile body with `decode`. Fetching is asynchronous and control returns to the event loop after every tile, so the main thread is never blocked; a tile that fails is logged with its URL and fails the query. -/
+/-- Merge nodes `lo` to `hi - 1` of a level stored as tiles of `n` nodes at `url t`, decoding each tile body with `decode`. Fetching is asynchronous and control returns to the event loop whenever 8 ms of work has run, so the main thread is never blocked; a tile that fails is logged with its URL and fails the query. -/
 def queryTiles {M : Type} [Aggregate M] (n : Nat) (hn : 0 < n) (url : Nat → String)
     (decode : ByteArray → Except String (Array M)) (lo hi : Nat) (cache : Option (TileCache M) := none) : Async M :=
-  Aggregate.foldTilesM n hn (fun t => do loadTile cache decode (url t)) yieldToEventLoop lo hi
+  do Aggregate.foldTilesM n hn (fun t => do loadTile cache decode (url t)) (← budgetedYield) lo hi
 
-/-- The aggregates of `cols` equal columns of the leaves `[lo, hi)` of a pyramid of `numLevels` levels with the given `branching`, whose tile `t` of level `k` is at `url k t`. Each tile is fetched once, with `fetchTile` unless `cache` holds it, and control returns to the event loop after every tile; a tile that fails is logged with its URL and fails the query. -/
+/-- The aggregates of `cols` equal columns of the leaves `[lo, hi)` of a pyramid of `numLevels` levels with the given `branching`, whose tile `t` of level `k` is at `url k t`. Each tile is fetched once, with `fetchTile` unless `cache` holds it, and control returns to the event loop whenever 8 ms of work has run; a tile that fails is logged with its URL and fails the query. -/
 def queryColumns {M : Type} [Aggregate M] (n : Nat) (hn : 0 < n) (branching numLevels : Nat)
     (url : Nat → Nat → String) (decode : ByteArray → Except String (Array M))
     (lo hi cols : Nat) (cache : Option (TileCache M) := none) : Async (Array M) :=
+  do
+  let yielder ← budgetedYield
   Pyramid.columnsM n hn branching numLevels
-    (fun k t => do loadTile cache decode (url k t)) yieldToEventLoop lo hi cols
+    (fun k t => do loadTile cache decode (url k t)) yielder lo hi cols
 
 /-- The leaves `[lo, hi)` as one array from `parts`, each the leaves starting at the leaf index in its first component. Leaves no part covers are `Aggregate.empty`, so a gap contributes nothing. -/
 def denseLeaves {M : Type} [Aggregate M] (parts : Array (Nat × Array M)) (lo hi : Nat) : Array M :=
@@ -268,14 +279,16 @@ def queryColumnsFrom {M : Type} [Aggregate M] (n : Nat) (hn : 0 < n) (branching 
     (url : Nat → Nat → String) (decode : ByteArray → Except String (Array M))
     (source : Nat → Nat → Array RawRange) (decodeLeaves : ByteArray → Except String (Array M))
     (lo hi cols : Nat) (cache : Option (TileCache M) := none) : Async (Array M) :=
+  do
+  let yielder ← budgetedYield
   columnsRawM n hn branching numLevels k0
-    (fun k t => do loadTile cache decode (url k t)) yieldToEventLoop
+    (fun k t => do loadTile cache decode (url k t)) yielder
     (fun lo hi => do
       let mut parts := #[]
       for r in source lo hi do
         let leaves ← loadTile cache decodeLeaves r.url (some (r.start, r.len))
         parts := parts.push (r.first, leaves)
-        yieldToEventLoop
+        yielder
       pure parts) lo hi cols
 
 end Inkproof.Web.Host
