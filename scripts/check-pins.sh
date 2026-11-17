@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Paul Butcher. All rights reserved.
-# Released under Apache 2.0 license as described in the file LICENSE.
 # Fail if any of this project's dependencies (an inkproof- repository under
 # one of GH_OWNERS, the GitHub owners it has lived under) is pinned to anything
 # but a release tag (vX.Y.Z). Other dependencies are not checked.
