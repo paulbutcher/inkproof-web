@@ -5,7 +5,7 @@ The browser host of Inkproof: a custom element that draws a chart on a shared We
 ## Requiring it
 
 ```lean
-require «inkproof-web» from git "https://github.com/paulbutcher/inkproof-web" @ "v0.4.1"
+require «inkproof-web» from git "https://github.com/paulbutcher/inkproof-web" @ "v0.4.8"
 ```
 
 Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser target; the rest build natively. See `DESIGN.md`.
@@ -17,7 +17,7 @@ Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser
 - Size the drawing surface to the device pixel ratio: `Size`, `backingPx`.
 - Measure text once per font and string: `TextCache`.
 - Read and validate the element's attributes, reporting bad ones instead of defaulting them: `ChartAttrs.parse`.
-- Log to the browser console at a threshold, warn by default: `Level`, `Level.parse`, `Level.enabled`.
+- Log to the browser console at a threshold, warn by default: `Level`, `Level.parse?`, `Level.enabled`.
 - Control a chart from the keyboard (zoom, pan, cursor, series): `Command.ofKey`, `Nav`, `Nav.apply`, `NavConfig`.
 - Describe a chart for assistive technology, with a name, a summary, a cursor reading and a data table: `Access`, `Access.summaryText`, `Access.cursorText`.
 - Format numbers and lines of text for those descriptions: `showFloat`, `formatLine`, `describe`.
