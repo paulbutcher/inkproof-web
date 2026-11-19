@@ -20,7 +20,7 @@ Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser
 - Read and validate the element's attributes, reporting bad ones instead of defaulting them: `ChartAttrs.parse`.
 - Log to the browser console at a threshold, warn by default: `Level`, `Level.parse?`, `Level.enabled`.
 - Control a chart from the keyboard (zoom, pan, cursor, series): `Command.ofKey`, `Nav`, `Nav.apply`, `NavConfig`.
-- Zoom, pan and box-zoom a chart with the wheel, a drag, shift-drag or a two-finger pinch, and learn the data position under the pointer from the `inkproof-pointer` event: `Pointer.wheelFactor`, `Pointer.pinch`, `Pointer.box`, `Nav.input`.
+- Zoom, pan and box-zoom a chart with the wheel, a drag, shift-drag or a two-finger pinch, and learn the data position under the pointer from the `inkproof-pointer` event: `Nav.input`, with the conversions from Viewport's `Gesture`.
 - Describe a chart for assistive technology, with a name, a summary, a cursor reading and a data table: `Access`, `Access.summaryText`, `Access.cursorText`.
 - Format numbers and lines of text for those descriptions: `showFloat`, `formatLine`, `describe`.
 - Fetch a tile, or a byte range of a file, with the status checked and a failure logged: `Host.fetchTile`.

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.6.0]
+
+- The pointer gesture conversions come from Viewport's `Gesture`; `Pointer` and `Px` are removed from Web.
+
 ## [0.5.0]
 
 - The chart zooms, pans and box-zooms from a wheel, drag or pinch, and reports the data position under the pointer as `inkproof-pointer`.

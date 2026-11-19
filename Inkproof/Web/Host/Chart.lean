@@ -6,6 +6,7 @@ import Lasm.JS
 import Lasm.JS.Web.Support
 import Lasm.JS.Web.Fetch
 import Std.Data.HashMap
+import Inkproof.Viewport.Gesture
 import Inkproof.Web.Surface
 import Inkproof.Web.Frame
 import Inkproof.Web.Attr
@@ -308,8 +309,8 @@ private def onWheel (c : Chart) (event : Value) : IO Unit := do
   let some (_, navConfig, _) ← navigable c | return
   event.callMethod "preventDefault" #[] Unit
   let scale : Float := if (← event.get "deltaMode" Nat) == 1 then 16 else 1
-  let p := Pointer.toView navConfig (← position c event)
-  let factor := Pointer.wheelFactor (scale * (← event.get "deltaY" Float))
+  let p := Gesture.toView navConfig.view (← position c event)
+  let factor := Gesture.wheelFactor (scale * (← event.get "deltaY" Float))
   applyInputs c [.wheel p.1 p.2 factor]
 
 private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
@@ -328,20 +329,20 @@ private def onPointerMove (c : Chart) (event : Value) : IO Unit := do
   let p ← position c event
   let tracked ← c.pointers.get
   if tracked.any (·.1 == id) then
-    let toView := Pointer.toView navConfig
+    let toView := Gesture.toView navConfig.view
     let moved := tracked.map fun t => if t.1 == id then (id, p) else t
     c.pointers.set moved
     match tracked, moved with
     | #[(_, o₁), (_, o₂)], #[(_, n₁), (_, n₂)] =>
-      applyInputs c (Pointer.pinch (toView o₁) (toView o₂) (toView n₁) (toView n₂))
+      applyInputs c (Gesture.pinch (toView o₁) (toView o₂) (toView n₁) (toView n₂))
     | #[(_, old)], _ =>
       if (← c.boxStart.get).isNone then
         let o := toView old
         let n := toView p
         applyInputs c [.drag (n.1 - o.1) (n.2 - o.2)]
     | _, _ => pure ()
-  if Pointer.inside navConfig p then
-    let v := Pointer.toView navConfig p
+  if Gesture.inside navConfig.view p then
+    let v := Gesture.toView navConfig.view p
     let d := View.cursor navConfig.view ((← c.nav.get).getD nav).view v.1 v.2
     dispatch c.el "inkproof-pointer" (obj [("x", toJS d.1), ("y", toJS d.2)])
 
@@ -351,7 +352,7 @@ private def onPointerUp (c : Chart) (event : Value) : IO Unit := do
     c.boxStart.set none
     if (← event.get "type" String) == "pointerup" then
       if let some (_, navConfig, _) ← navigable c then
-        if let some input := Pointer.box navConfig start (← position c event) then applyInputs c [input]
+        if let some input := Gesture.box navConfig.view start (← position c event) then applyInputs c [input]
   c.pointers.modify (·.filter (·.1 != id))
 
 private def load (c : Chart) (loader : String → Async Scene) : Async Unit := do
