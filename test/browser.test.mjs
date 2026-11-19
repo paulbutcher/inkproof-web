@@ -152,6 +152,46 @@ test('a lost context is recovered without a reload and is logged', async () => {
   await context.close();
 });
 
+const at = (page, x, y) => page.evaluate(([x, y]) => {
+  const c = document.querySelector('inkproof-chart').shadowRoot.querySelector('canvas');
+  return [...c.getContext('2d').getImageData(x, y, 1, 1).data];
+}, [x, y]);
+const load = async (page, src) => {
+  const n = await page.evaluate(() => window.draws.length);
+  await page.evaluate(src => document.querySelector('inkproof-chart').setAttribute('src', src), src);
+  await drawn(page, n + 1);
+};
+
+test('a list drawing buffers an earlier list uploaded draws them without a re-upload', async () => {
+  const { page, context } = await open('/index.html');
+  await drawn(page, 1);
+  const first = [await at(page, 10, 190), await at(page, 300, 100)];
+  await load(page, 'reuse.bin');
+  assert.deepEqual([await at(page, 10, 190), await at(page, 300, 100)], first);
+  assert.notDeepEqual(first[0], first[1]);
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
+test('after a lost context the earlier uploads are reported gone and a fresh list draws', async () => {
+  const { page, context } = await open('/index.html');
+  await drawn(page, 1);
+  await page.evaluate(() => {
+    window.restored = [];
+    addEventListener('inkproof-contextrestored', e => window.restored.push(e.detail.generation));
+    window.lose = window.contexts[0].getExtension('WEBGL_lose_context');
+    window.lose.loseContext();
+  });
+  await page.waitForFunction(() => window.contexts[0].isContextLost());
+  await page.evaluate(() => window.lose.restoreContext());
+  await drawn(page, 2);
+  assert.deepEqual(await page.evaluate(() => window.restored), [1]);
+  await load(page, 'chart.bin');
+  assert.deepEqual(await at(page, 10, 190), [0, 0, 255, 255]);
+  assert.deepEqual(await at(page, 300, 100), [255, 128, 0, 255]);
+  await context.close();
+});
+
 test('invalid attributes are reported, not defaulted', async () => {
   const { page, context, messages } = await open('/invalid.html');
   await page.waitForFunction(() => window.errors.length >= 2);

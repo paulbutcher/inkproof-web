@@ -13,6 +13,7 @@ Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser
 ## What it does
 
 - Draw an Inkproof chart in a web page as a custom element, run on one WebGL2 context shared by every chart, recovered after a lost context: `Inkproof.Web.Host.register`.
+- Keep buffers and programs on the GPU between draws so a list can draw what an earlier one uploaded, and learn when a lost context discarded them: `Host.contextGeneration`, the `inkproof-contextrestored` event.
 - Redraw only when something changed, never while idle: `Frame`, `Frame.invalidate`, `Frame.shouldDraw`.
 - Size the drawing surface to the device pixel ratio: `Size`, `backingPx`.
 - Measure text once per font and string: `TextCache`.

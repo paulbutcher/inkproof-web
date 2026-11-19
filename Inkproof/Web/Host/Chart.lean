@@ -41,6 +41,7 @@ def fetchScene (src : String) : Async Scene := do
 private structure Shared where
   canvas : Value
   gl : Value
+  state : IO.Ref Value
 
 private structure Chart where
   id : Nat
@@ -65,10 +66,14 @@ private structure Chart where
 /-- One WebGL2 context serves every chart on the page: each draws into it and copies the result to its own canvas. -/
 initialize shared : IO.Ref (Option (Option Shared)) ← IO.mkRef none
 initialize contextLost : IO.Ref Bool ← IO.mkRef false
+initialize generation : IO.Ref Nat ← IO.mkRef 0
 initialize live : IO.Ref (Std.HashMap Nat Chart) ← IO.mkRef {}
 initialize nextId : IO.Ref Nat ← IO.mkRef 0
 /-- Redraws every chart; set once `schedule` exists, since drawing is what creates the context that reports its restoration. -/
 initialize redrawAll : IO.Ref (IO Unit) ← IO.mkRef (pure ())
+
+/-- How many times the shared context has been lost and restored. A list that draws buffers or programs an earlier list uploaded is valid only while this is the value it was built under; after a change, build the next list as for a fresh context. -/
+def contextGeneration : IO Nat := generation.get
 
 private def idKey : String := "__inkproofChart"
 
@@ -85,17 +90,25 @@ private def sharedContext (c : Chart) : IO (Option Shared) := do
   if let some s ← shared.get then return s
   let canvas ← (← (← global).get "document").callMethod "createElement" #[toJS "canvas"]
   let gl ← Web.Support.optionalValue (← canvas.callMethod "getContext" #[toJS "webgl2"] Data)
-  let s := gl.map fun gl => { canvas, gl : Shared }
+  let s ← match gl with
+    | some gl => do pure (some { canvas, gl, state := ← IO.mkRef (← newState) : Shared })
+    | none => pure none
   shared.set (some s)
   if let some s := s then
     let lost ← Function.ofSyncFn fun args => do
       if let some (Data.ref e _) := args[0]? then discard <| e.callMethod "preventDefault" #[] Unit
       contextLost.set true
+      -- The context's objects are gone with it, so the interpreter's tables must not name them.
+      s.state.set (← newState)
+      generation.modify (· + 1)
       log .warn "WebGL context lost, waiting for restoration" []
       return .undefined
     let restored ← Function.ofSyncFn fun _ => do
       contextLost.set false
       log .warn "WebGL context restored, redrawing" [("charts", toString (← live.get).size)]
+      let gen ← generation.get
+      for (_, chart) in (← live.get) do
+        dispatch chart.el "inkproof-contextrestored" (obj [("generation", toJS gen)])
       (← redrawAll.get)
       return .undefined
     s.canvas.callMethod "addEventListener" #[toJS "webglcontextlost", toJS lost] Unit
@@ -122,7 +135,7 @@ private def draw (c : Chart) : IO Unit := do
     if (← s.canvas.get "width" Nat) != size.width then s.canvas.set "width" size.width
     if (← s.canvas.get "height" Nat) != size.height then s.canvas.set "height" size.height
     s.gl.callMethod "viewport" #[toJS 0, toJS 0, toJS size.width, toJS size.height] Unit
-    run s.gl (← newState) scene.commands
+    run s.gl (← s.state.get) scene.commands
     c.ctx.callMethod "setTransform" #[toJS 1, toJS 0, toJS 0, toJS 1, toJS 0, toJS 0] Unit
     c.ctx.callMethod "clearRect" #[toJS 0, toJS 0, toJS size.width, toJS size.height] Unit
     c.ctx.callMethod "drawImage" #[toJS s.canvas, toJS 0, toJS 0] Unit
