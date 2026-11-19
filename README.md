@@ -16,6 +16,7 @@ Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser
 - Keep buffers and programs on the GPU between draws so a list can draw what an earlier one uploaded, and learn when a lost context discarded them: `Host.contextGeneration`, the `inkproof-contextrestored` event.
 - Redraw only when something changed, never while idle: `Frame`, `Frame.invalidate`, `Frame.shouldDraw`.
 - Size the drawing surface to the device pixel ratio: `Size`, `backingPx`.
+- Draw text over a chart, anchored and aligned on a point and turned about it, as axis labels need: `Host.Label` with `align`, `baseline` and `rotation`.
 - Measure text once per font and string: `TextCache`.
 - Read and validate the element's attributes, reporting bad ones instead of defaulting them: `ChartAttrs.parse`.
 - Log to the browser console at a threshold, warn by default: `Level`, `Level.parse?`, `Level.enabled`.

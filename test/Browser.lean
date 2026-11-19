@@ -18,6 +18,14 @@ def labelledScene (src : String) : Async Scene := do
   let layout := Inkproof.Axis.layoutLabels measure 4 positioned
   return { scene with labels := layout.kept.toArray.map fun (x, text) => { text, x, y := 100 } }
 
+/-- The same text twice: centred on its anchor, and turned a quarter turn anticlockwise with its end at the anchor. -/
+def turnedScene (src : String) : Async Scene := do
+  let scene ← fetchScene src
+  let text := "turned label"
+  return { scene with labels := #[
+    { text, x := 100, y := 100, align := .center, baseline := .middle },
+    { text, x := 300, y := 100, align := .end, baseline := .middle, rotation := -1.5707963267948966 }] }
+
 /-- A scene with two series of five points, a view over 0 to 100 (400 pixels across and 200 high), and data for the table. -/
 def accessibleScene (src : String) : Async Scene := do
   let scene ← fetchScene src
@@ -32,3 +40,4 @@ def main : IO Unit := do
   register "inkproof-accessible-chart" accessibleScene
   register "inkproof-chart"
   register "inkproof-labelled-chart" labelledScene
+  register "inkproof-turned-chart" turnedScene

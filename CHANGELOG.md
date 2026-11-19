@@ -3,6 +3,7 @@
 ## [0.6.0]
 
 - The pointer gesture conversions come from Viewport's `Gesture`; `Pointer` and `Px` are removed from Web.
+- A `Host.Label` has an alignment, a baseline and a rotation, drawn by the Canvas 2D layer.
 
 ## [0.5.0]
 

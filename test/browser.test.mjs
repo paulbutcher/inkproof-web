@@ -248,6 +248,32 @@ test('labels from Axis are drawn over the data layer and measured once', async (
   await context.close();
 });
 
+test('labels are aligned on their anchor and turned about it', async () => {
+  const { page, context } = await open('/turned.html');
+  await drawn(page, 1);
+  const boxes = await page.evaluate(() => {
+    const c = document.querySelector('inkproof-turned-chart').shadowRoot.querySelector('canvas');
+    const k = c.width / 400;
+    const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    const box = () => ({ x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity });
+    const out = [box(), box()];
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+      const i = (y * c.width + x) * 4;
+      if (data[i] > 90 || data[i + 1] > 90 || data[i + 2] > 90) continue;
+      const b = out[x < c.width / 2 ? 0 : 1];
+      b.x0 = Math.min(b.x0, x / k); b.x1 = Math.max(b.x1, x / k);
+      b.y0 = Math.min(b.y0, y / k); b.y1 = Math.max(b.y1, y / k);
+    }
+    return out;
+  });
+  const [flat, turned] = boxes;
+  assert.ok(flat.x1 - flat.x0 > flat.y1 - flat.y0, 'horizontal text is not wider than tall');
+  assert.ok(flat.x0 < 100 && 100 < flat.x1, 'centred text does not straddle its anchor');
+  assert.ok(turned.y1 - turned.y0 > turned.x1 - turned.x0, 'turned text is not taller than wide');
+  assert.ok(turned.y0 >= 99, 'text ending at its anchor extends past it');
+  await context.close();
+});
+
 test('a tile query sums the tiles it touches and leaves the main thread free', async () => {
   const { page, context, messages } = await open('/tiles.html');
   const requests = [];

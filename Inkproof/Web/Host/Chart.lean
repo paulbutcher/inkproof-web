@@ -19,11 +19,63 @@ import Inkproof.Web.Host.Element
 namespace Inkproof.Web.Host
 open Lasm.JS Inkproof.Viewport
 
-/-- A piece of text for the Canvas 2D layer, in CSS pixels from the chart's top left. -/
+/-- Which side of its anchor a label's text lies on along the baseline. -/
+inductive Align where
+  | start
+  | center
+  | «end»
+
+/-- Where a label's anchor lies against the height of its text. -/
+inductive Baseline where
+  | top
+  | middle
+  | alphabetic
+  | bottom
+
+/-- The Canvas 2D `textAlign` value. -/
+def Align.canvas : Align → String
+  | .start => "start"
+  | .center => "center"
+  | .end => "end"
+
+/-- The Canvas 2D `textBaseline` value. -/
+def Baseline.canvas : Baseline → String
+  | .top => "top"
+  | .middle => "middle"
+  | .alphabetic => "alphabetic"
+  | .bottom => "bottom"
+
+theorem Align.canvas_eq (a : Align) : a.canvas =
+    match a with
+    | .start => "start"
+    | .center => "center"
+    | .end => "end" := by
+  cases a <;> rfl
+
+theorem Baseline.canvas_eq (b : Baseline) : b.canvas =
+    match b with
+    | .top => "top"
+    | .middle => "middle"
+    | .alphabetic => "alphabetic"
+    | .bottom => "bottom" := by
+  cases b <;> rfl
+
+theorem Align.canvas_injective: Function.Injective Align.canvas := by
+  intro a b h
+  cases a <;> cases b <;> first | rfl | (simp [Align.canvas] at h)
+
+theorem Baseline.canvas_injective : Function.Injective Baseline.canvas := by
+  intro a b h
+  cases a <;> cases b <;> first | rfl | (simp [Baseline.canvas] at h)
+
+/-- A piece of text for the Canvas 2D layer, anchored at `x`, `y` in CSS pixels from the chart's top left. The text is turned about the anchor by `rotation` radians, clockwise on the page. -/
 structure Label where
   text : String
   x : Float
   y : Float
+  align : Align := .start
+  baseline : Baseline := .alphabetic
+  rotation : Float := 0
   font : String := "12px sans-serif"
   color : String := "#000"
 
@@ -151,7 +203,13 @@ private def draw (c : Chart) : IO Unit := do
   for label in scene.labels do
     c.ctx.set "font" label.font
     c.ctx.set "fillStyle" label.color
-    c.ctx.callMethod "fillText" #[toJS label.text, toJS label.x, toJS label.y] Unit
+    c.ctx.set "textAlign" label.align.canvas
+    c.ctx.set "textBaseline" label.baseline.canvas
+    c.ctx.callMethod "save" #[] Unit
+    c.ctx.callMethod "translate" #[toJS label.x, toJS label.y] Unit
+    c.ctx.callMethod "rotate" #[toJS label.rotation] Unit
+    c.ctx.callMethod "fillText" #[toJS label.text, toJS 0, toJS 0] Unit
+    c.ctx.callMethod "restore" #[] Unit
   dispatch c.el "inkproof-draw" (obj [("width", toJS size.width), ("height", toJS size.height)])
 
 private def onFrame (c : Chart) : IO Unit := do
