@@ -3,6 +3,7 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import Inkproof.Axis.LabelLayout
+import Inkproof.Web.Host.Axis
 import Inkproof.Web.Host.Chart
 import Inkproof.Web.Host.Measure
 import Inkproof.Viewport.View
@@ -18,13 +19,13 @@ def labelledScene (src : String) : Async Scene := do
   let layout := Inkproof.Axis.layoutLabels measure 4 positioned
   return { scene with labels := layout.kept.toArray.map fun (x, text) => { text, x, y := 100 } }
 
-/-- The same text twice: centred on its anchor, and turned a quarter turn anticlockwise with its end at the anchor. -/
+/-- The same text twice: centred on its anchor, and as Scene's vertical label under a bottom axis, a quarter turn anticlockwise with its end at the anchor. -/
 def turnedScene (src : String) : Async Scene := do
   let scene ← fetchScene src
   let text := "turned label"
   return { scene with labels := #[
     { text, x := 100, y := 100, align := .center, baseline := .middle },
-    { text, x := 300, y := 100, align := .end, baseline := .middle, rotation := -1.5707963267948966 }] }
+    Label.ofPlaced .bottom ⟨text, ⟨300, 100⟩, .vertical⟩] }
 
 /-- A scene with two series of five points, a view over 0 to 100 (400 pixels across and 200 high), and data for the table. -/
 def accessibleScene (src : String) : Async Scene := do

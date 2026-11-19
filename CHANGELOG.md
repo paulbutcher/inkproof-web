@@ -3,6 +3,7 @@
 ## [0.6.1]
 
 - A `Host.Label` has an alignment, a baseline and a rotation, drawn by the Canvas 2D layer.
+- `Label.ofPlaced` and `Label.ofDrawing` turn Scene's placed axis labels into `Host.Label`s; Web requires Scene v0.11.0 and Axis v0.6.0.
 
 ## [0.6.0]
 
