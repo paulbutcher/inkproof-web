@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.9]
+
+- The host keeps interpreter state between draws, so command lists may draw buffers uploaded earlier, and reports context restoration.
+
 ## [0.4.8]
 
 - Tile queries read the clock once every 32 steps instead of three boundary crossings on every step.
