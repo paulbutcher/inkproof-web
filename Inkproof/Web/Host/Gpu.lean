@@ -10,6 +10,9 @@ open Lasm.JS
 /-- A fresh interpreter state (its buffer, program and uniform tables). -/
 @[js "inkproof-gpu-js" "newState"] opaque newState : IO Value
 
+/-- Delete every GL object the state holds and empty it. -/
+@[js "inkproof-gpu-js" "releaseState"] opaque releaseState : Value → Value → IO Unit
+
 /-- Interpret an encoded command list on a WebGL2 context. -/
 @[js "inkproof-gpu-js" "run"] opaque run : Value → Value → ByteArray → IO Unit
 

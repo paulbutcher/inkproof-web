@@ -32,11 +32,17 @@ function compile(gl, type, source) {
 
 function buildProgram(gl) {
   const program = gl.createProgram();
-  gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, VERTEX_SOURCE));
-  gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE));
+  const shaders = [compile(gl, gl.VERTEX_SHADER, VERTEX_SOURCE), compile(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE)];
+  for (const shader of shaders) gl.attachShader(program, shader);
   gl.bindAttribLocation(program, 0, "a_position");
   gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+  const linked = gl.getProgramParameter(program, gl.LINK_STATUS);
+  for (const shader of shaders) gl.deleteShader(shader);
+  if (!linked) {
+    const log = gl.getProgramInfoLog(program);
+    gl.deleteProgram(program);
+    throw new Error(log);
+  }
   return { program, uniforms: UNIFORM_NAMES.map(n => gl.getUniformLocation(program, n)) };
 }
 
@@ -66,6 +72,15 @@ export function decode(bytes) {
 
 export function newState() {
   return { buffers: new Map(), programs: new Map(), current: null };
+}
+
+export function releaseState(gl, s) {
+  if (s.current) gl.useProgram(null);
+  for (const b of s.buffers.values()) gl.deleteBuffer(b);
+  for (const p of s.programs.values()) gl.deleteProgram(p.program);
+  s.buffers.clear();
+  s.programs.clear();
+  s.current = null;
 }
 
 export function run(gl, s, bytes) {

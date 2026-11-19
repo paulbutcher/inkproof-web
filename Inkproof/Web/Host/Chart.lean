@@ -341,6 +341,11 @@ private def disconnect (args : Array Data) : IO Data := do
     if let some (query, changed) ← c.ratioQuery.get then
       query.callMethod "removeEventListener" #[toJS "change", toJS changed] Unit
     live.modify (·.erase c.id)
+    if (← live.get).isEmpty then
+      if let some (some s) ← shared.get then
+        releaseState s.gl (← s.state.get)
+        s.state.set (← newState)
+        generation.modify (· + 1)
   return .undefined
 
 private def changed (loader : String → Async Scene) (args : Array Data) : Async Unit := do

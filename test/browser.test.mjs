@@ -192,6 +192,23 @@ test('after a lost context the earlier uploads are reported gone and a fresh lis
   await context.close();
 });
 
+test('a chart added after the last one was removed draws from a fresh state', async () => {
+  const { page, context } = await open('/index.html');
+  await drawn(page, 1);
+  await page.evaluate(() => document.querySelector('inkproof-chart').remove());
+  const n = await page.evaluate(() => window.draws.length);
+  await page.evaluate(() => {
+    const el = document.createElement('inkproof-chart');
+    el.setAttribute('src', 'chart.bin');
+    document.body.append(el);
+  });
+  await drawn(page, n + 1);
+  assert.deepEqual(await at(page, 10, 190), [0, 0, 255, 255]);
+  assert.deepEqual(await at(page, 300, 100), [255, 128, 0, 255]);
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
 test('invalid attributes are reported, not defaulted', async () => {
   const { page, context, messages } = await open('/invalid.html');
   await page.waitForFunction(() => window.errors.length >= 2);

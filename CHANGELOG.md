@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.10]
+
+- When the last chart is removed the host deletes the buffers and programs it still holds.
+
 ## [0.4.9]
 
 - The host keeps interpreter state between draws, so command lists may draw buffers uploaded earlier, and reports context restoration.
