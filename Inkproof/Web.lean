@@ -8,5 +8,6 @@ import Inkproof.Web.Log
 import Inkproof.Web.Attr
 import Inkproof.Web.Text
 import Inkproof.Web.Access
+import Inkproof.Web.Pointer
 
 /-! # Inkproof.Web -/

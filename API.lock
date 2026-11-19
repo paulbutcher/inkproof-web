@@ -68,6 +68,9 @@ theorem Inkproof.Web.Nav.apply_view : ∀ (c : Inkproof.Web.NavConfig) (n : Inkp
 def Inkproof.Web.Nav.home : Inkproof.Web.NavConfig → Inkproof.Web.Nav
 theorem Inkproof.Web.Nav.home_cursor : ∀ (c : Inkproof.Web.NavConfig), (Inkproof.Web.Nav.home c).point = 0 ∧ (Inkproof.Web.Nav.home c).series = 0
 theorem Inkproof.Web.Nav.home_view : ∀ (c : Inkproof.Web.NavConfig), (Inkproof.Web.Nav.home c).view = Inkproof.Viewport.View.home c.view
+def Inkproof.Web.Nav.input : Inkproof.Web.NavConfig → Inkproof.Web.Nav → Inkproof.Viewport.Input Float → Inkproof.Web.Nav
+theorem Inkproof.Web.Nav.input_eq : ∀ (c : Inkproof.Web.NavConfig) (n : Inkproof.Web.Nav) (i : Inkproof.Viewport.Input Float), Inkproof.Web.Nav.input c n i = { view := Inkproof.Viewport.View.step c.view n.view i, point := n.point, series := n.series }
+theorem Inkproof.Web.Nav.input_key : ∀ (c : Inkproof.Web.NavConfig) (n : Inkproof.Web.Nav) (k : Inkproof.Viewport.Key), Inkproof.Web.Nav.input c n (Inkproof.Viewport.Input.key k) = Inkproof.Web.Nav.apply c n (Inkproof.Web.Command.view k)
 constructor Inkproof.Web.Nav.mk : Inkproof.Viewport.View Float → Nat → Nat → Inkproof.Web.Nav
 field Inkproof.Web.Nav.point : Inkproof.Web.Nav → Nat
 field Inkproof.Web.Nav.series : Inkproof.Web.Nav → Nat
@@ -77,6 +80,21 @@ constructor Inkproof.Web.NavConfig.mk : Inkproof.Viewport.ViewConfig Float → N
 field Inkproof.Web.NavConfig.points : Inkproof.Web.NavConfig → Nat
 field Inkproof.Web.NavConfig.series : Inkproof.Web.NavConfig → Nat
 field Inkproof.Web.NavConfig.view : Inkproof.Web.NavConfig → Inkproof.Viewport.ViewConfig Float
+def Inkproof.Web.Pointer.box : Inkproof.Web.NavConfig → Inkproof.Web.Px → Inkproof.Web.Px → Option (Inkproof.Viewport.Input Float)
+theorem Inkproof.Web.Pointer.box_none : ∀ (c : Inkproof.Web.NavConfig) (a b : Inkproof.Web.Px), (b.fst - a.fst).abs < Inkproof.Web.Pointer.minBox → Inkproof.Web.Pointer.box c a b = Option.none
+theorem Inkproof.Web.Pointer.box_some : ∀ (c : Inkproof.Web.NavConfig) (a b : Inkproof.Web.Px), ¬(Decidable.decide ((b.fst - a.fst).abs < Inkproof.Web.Pointer.minBox) || Decidable.decide ((b.snd - a.snd).abs < Inkproof.Web.Pointer.minBox)) = Bool.true → Inkproof.Web.Pointer.box c a b = Option.some (Inkproof.Viewport.Input.box (Inkproof.Web.Pointer.toView c a).fst (Inkproof.Web.Pointer.toView c a).snd (Inkproof.Web.Pointer.toView c b).fst (Inkproof.Web.Pointer.toView c b).snd)
+def Inkproof.Web.Pointer.inside : Inkproof.Web.NavConfig → Inkproof.Web.Px → Bool
+theorem Inkproof.Web.Pointer.inside_eq : ∀ (c : Inkproof.Web.NavConfig) (p : Inkproof.Web.Px), Inkproof.Web.Pointer.inside c p = (Decidable.decide (0 ≤ p.fst) && Decidable.decide (p.fst ≤ c.view.x.length) && Decidable.decide (0 ≤ p.snd) && Decidable.decide (p.snd ≤ c.view.y.length))
+def Inkproof.Web.Pointer.minBox : Float
+def Inkproof.Web.Pointer.pinch : Inkproof.Web.Px → Inkproof.Web.Px → Inkproof.Web.Px → Inkproof.Web.Px → List (Inkproof.Viewport.Input Float)
+theorem Inkproof.Web.Pointer.pinch_eq : ∀ (o₁ o₂ n₁ n₂ : Inkproof.Web.Px), Inkproof.Web.Pointer.pinch o₁ o₂ n₁ n₂ = [Inkproof.Viewport.Input.pinch ((o₁.fst + o₂.fst) / 2) ((o₁.snd + o₂.snd) / 2) (Inkproof.Web.Pointer.spread (o₂.fst - o₁.fst).abs (n₂.fst - n₁.fst).abs) (Inkproof.Web.Pointer.spread (o₂.snd - o₁.snd).abs (n₂.snd - n₁.snd).abs), Inkproof.Viewport.Input.drag ((n₁.fst + n₂.fst) / 2 - (o₁.fst + o₂.fst) / 2) ((n₁.snd + n₂.snd) / 2 - (o₁.snd + o₂.snd) / 2)]
+def Inkproof.Web.Pointer.spread : Float → Float → Float
+theorem Inkproof.Web.Pointer.spread_eq : ∀ (old new : Float), Inkproof.Web.Pointer.spread old new = if (Decidable.decide (old < 1) || Decidable.decide (new < 1)) = Bool.true then 1 else new / old
+def Inkproof.Web.Pointer.toView : Inkproof.Web.NavConfig → Inkproof.Web.Px → Inkproof.Web.Px
+theorem Inkproof.Web.Pointer.toView_eq : ∀ (c : Inkproof.Web.NavConfig) (p : Inkproof.Web.Px), Inkproof.Web.Pointer.toView c p = (p.fst, c.view.y.length - p.snd)
+def Inkproof.Web.Pointer.wheelFactor : Float → Float
+theorem Inkproof.Web.Pointer.wheelFactor_eq : ∀ (delta : Float), Inkproof.Web.Pointer.wheelFactor delta = (-delta / 500).exp
+def Inkproof.Web.Px : Type
 structure Inkproof.Web.Size : Type
 def Inkproof.Web.Size.backing : Nat → Nat → Inkproof.Web.Milli → Inkproof.Web.Size
 theorem Inkproof.Web.Size.backing_height : ∀ (w h : Nat) (ratio : Inkproof.Web.Milli), (Inkproof.Web.Size.backing w h ratio).height = Inkproof.Web.backingPx h ratio

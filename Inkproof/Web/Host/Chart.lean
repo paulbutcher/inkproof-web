@@ -10,12 +10,13 @@ import Inkproof.Web.Surface
 import Inkproof.Web.Frame
 import Inkproof.Web.Attr
 import Inkproof.Web.Access
+import Inkproof.Web.Pointer
 import Inkproof.Web.Host.Console
 import Inkproof.Web.Host.Gpu
 import Inkproof.Web.Host.Element
 
 namespace Inkproof.Web.Host
-open Lasm.JS
+open Lasm.JS Inkproof.Viewport
 
 /-- A piece of text for the Canvas 2D layer, in CSS pixels from the chart's top left. -/
 structure Label where
@@ -51,7 +52,9 @@ private structure Chart where
   announcer : Value
   table : Value
   nav : IO.Ref (Option Nav)
-  keydown : IO.Ref (Option Value)
+  listeners : IO.Ref (Array (String × Value))
+  pointers : IO.Ref (Array (Nat × Px))
+  boxStart : IO.Ref (Option Px)
   frame : IO.Ref Frame
   scheduled : IO.Ref Bool
   alive : IO.Ref Bool
@@ -198,7 +201,7 @@ private partial def watchRatio (c : Chart) : IO Unit := do
   c.ratioQuery.set (some (query, changed))
 
 private def styles : String :=
-  ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}" ++
+  ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host{touch-action:none}" ++
   ".hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}" ++
   ":host([show-table]) canvas{display:none}:host([show-table]) .hidden:not([aria-live]){position:static;width:100%;height:auto;overflow:auto;clip-path:none}"
 
@@ -229,7 +232,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
   let ctx ← canvas.callMethod "getContext" #[toJS "2d"]
   return {
     id, el, canvas, ctx, announcer, table
-    nav := ← IO.mkRef none, keydown := ← IO.mkRef none
+    nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none
@@ -263,17 +266,8 @@ private def publish (c : Chart) (access : Access) : IO Unit := do
   refreshSummary c access
   rebuildTable c access
 
-private def onKey (c : Chart) (event : Value) : IO Unit := do
-  let some scene ← c.scene.get | return
-  let some config := scene.access.view | return
-  let some nav ← c.nav.get | return
-  let held (flag : String) : IO Bool := event.get flag Bool
-  if (← held "ctrlKey") || (← held "altKey") || (← held "metaKey") then return
-  let key ← event.get "key" String
-  let some command := Command.ofKey key (← held "shiftKey") | return
-  event.callMethod "preventDefault" #[] Unit
-  let navConfig : NavConfig := ⟨config, scene.access.points, scene.access.series.size⟩
-  let next := nav.apply navConfig command
+/-- Make `next` the chart's state, telling the application and assistive technology of what changed from `nav`. -/
+private def commit (c : Chart) (scene : Scene) (nav next : Nav) : IO Unit := do
   c.nav.set (some next)
   if next.view != nav.view then
     let x := next.view.x
@@ -285,6 +279,80 @@ private def onKey (c : Chart) (event : Value) : IO Unit := do
   if next.point != nav.point || next.series != nav.series then
     dispatch c.el "inkproof-cursor" (obj [("series", toJS next.series), ("point", toJS next.point)])
     setText c (scene.access.cursorText next)
+
+private def navigable (c : Chart) : IO (Option (Scene × NavConfig × Nav)) := do
+  let some scene ← c.scene.get | return none
+  let some config := scene.access.view | return none
+  let some nav ← c.nav.get | return none
+  return some (scene, ⟨config, scene.access.points, scene.access.series.size⟩, nav)
+
+private def onKey (c : Chart) (event : Value) : IO Unit := do
+  let some (scene, navConfig, nav) ← navigable c | return
+  let held (flag : String) : IO Bool := event.get flag Bool
+  if (← held "ctrlKey") || (← held "altKey") || (← held "metaKey") then return
+  let key ← event.get "key" String
+  let some command := Command.ofKey key (← held "shiftKey") | return
+  event.callMethod "preventDefault" #[] Unit
+  commit c scene nav (nav.apply navConfig command)
+
+private def position (c : Chart) (event : Value) : IO Px := do
+  let rect ← c.el.callMethod "getBoundingClientRect" #[]
+  return ((← event.get "clientX" Float) - (← rect.get "left" Float),
+          (← event.get "clientY" Float) - (← rect.get "top" Float))
+
+private def applyInputs (c : Chart) (inputs : List (Input Float)) : IO Unit := do
+  let some (scene, navConfig, nav) ← navigable c | return
+  commit c scene nav (inputs.foldl (·.input navConfig ·) nav)
+
+private def onWheel (c : Chart) (event : Value) : IO Unit := do
+  let some (_, navConfig, _) ← navigable c | return
+  event.callMethod "preventDefault" #[] Unit
+  let scale : Float := if (← event.get "deltaMode" Nat) == 1 then 16 else 1
+  let p := Pointer.toView navConfig (← position c event)
+  let factor := Pointer.wheelFactor (scale * (← event.get "deltaY" Float))
+  applyInputs c [.wheel p.1 p.2 factor]
+
+private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
+  let some _ ← navigable c | return
+  let id ← event.get "pointerId" Nat
+  let p ← position c event
+  c.pointers.modify (·.filter (·.1 != id) |>.push (id, p))
+  -- A pointer the browser no longer considers active cannot be captured; the gesture still works.
+  try c.el.callMethod "setPointerCapture" #[toJS id] Unit
+  catch e => log .warn "pointer capture failed, continuing without it" [("error", toString e)]
+  c.boxStart.set (if (← c.pointers.get).size == 1 && (← event.get "shiftKey" Bool) then some p else none)
+
+private def onPointerMove (c : Chart) (event : Value) : IO Unit := do
+  let some (_, navConfig, nav) ← navigable c | return
+  let id ← event.get "pointerId" Nat
+  let p ← position c event
+  let tracked ← c.pointers.get
+  if tracked.any (·.1 == id) then
+    let toView := Pointer.toView navConfig
+    let moved := tracked.map fun t => if t.1 == id then (id, p) else t
+    c.pointers.set moved
+    match tracked, moved with
+    | #[(_, o₁), (_, o₂)], #[(_, n₁), (_, n₂)] =>
+      applyInputs c (Pointer.pinch (toView o₁) (toView o₂) (toView n₁) (toView n₂))
+    | #[(_, old)], _ =>
+      if (← c.boxStart.get).isNone then
+        let o := toView old
+        let n := toView p
+        applyInputs c [.drag (n.1 - o.1) (n.2 - o.2)]
+    | _, _ => pure ()
+  if Pointer.inside navConfig p then
+    let v := Pointer.toView navConfig p
+    let d := View.cursor navConfig.view ((← c.nav.get).getD nav).view v.1 v.2
+    dispatch c.el "inkproof-pointer" (obj [("x", toJS d.1), ("y", toJS d.2)])
+
+private def onPointerUp (c : Chart) (event : Value) : IO Unit := do
+  let id ← event.get "pointerId" Nat
+  if let some start ← c.boxStart.get then
+    c.boxStart.set none
+    if (← event.get "type" String) == "pointerup" then
+      if let some (_, navConfig, _) ← navigable c then
+        if let some input := Pointer.box navConfig start (← position c event) then applyInputs c [input]
+  c.pointers.modify (·.filter (·.1 != id))
 
 private def load (c : Chart) (loader : String → Async Scene) : Async Unit := do
   let src ← getAttr c.el "src"
@@ -317,11 +385,14 @@ private def connect (loader : String → Async Scene) (args : Array Data) : Asyn
   let c ← build id el
   el.set idKey id
   live.modify (·.insert id c)
-  let keydown ← Function.ofSyncFn fun args => do
-    if let some (Data.ref event _) := args[0]? then onKey c event
-    return .undefined
-  el.callMethod "addEventListener" #[toJS "keydown", toJS keydown] Unit
-  c.keydown.set (some keydown)
+  for (name, handler) in [("keydown", onKey c), ("wheel", onWheel c), ("pointerdown", onPointerDown c),
+      ("pointermove", onPointerMove c), ("pointerup", onPointerUp c), ("pointercancel", onPointerUp c)] do
+    let listener ← Function.ofSyncFn fun args => do
+      if let some (Data.ref event _) := args[0]? then handler event
+      return .undefined
+    let options := if name == "wheel" then obj [("passive", .bool false)] else obj []
+    el.callMethod "addEventListener" #[toJS name, toJS listener, options] Unit
+    c.listeners.modify (·.push (name, listener))
   c.frameCallback.set (some (← Function.ofSyncFn fun _ => do onFrame c; return .undefined))
   let observe ← Function.ofSyncFn fun _ => do
     if (← c.alive.get) then sync c
@@ -336,7 +407,8 @@ private def connect (loader : String → Async Scene) (args : Array Data) : Asyn
 private def disconnect (args : Array Data) : IO Data := do
   if let some c ← chartOf args then
     c.alive.set false
-    if let some k ← c.keydown.get then c.el.callMethod "removeEventListener" #[toJS "keydown", toJS k] Unit
+    for (name, listener) in ← c.listeners.get do
+      c.el.callMethod "removeEventListener" #[toJS name, toJS listener] Unit
     if let some o ← c.observer.get then o.callMethod "disconnect" #[] Unit
     if let some (query, changed) ← c.ratioQuery.get then
       query.callMethod "removeEventListener" #[toJS "change", toJS changed] Unit

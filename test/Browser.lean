@@ -18,13 +18,13 @@ def labelledScene (src : String) : Async Scene := do
   let layout := Inkproof.Axis.layoutLabels measure 4 positioned
   return { scene with labels := layout.kept.toArray.map fun (x, text) => { text, x, y := 100 } }
 
-/-- A scene with two series of five points, a view over 0 to 100, and data for the table. -/
+/-- A scene with two series of five points, a view over 0 to 100 (400 pixels across and 200 high), and data for the table. -/
 def accessibleScene (src : String) : Async Scene := do
   let scene ← fetchScene src
   let axis : Inkproof.Viewport.Interval.Config Float :=
     { length := 400, minSpan := 1, maxSpan := 100, home := ⟨0, 100⟩, keyZoom := 2, keyPan := 0.25 }
   return { scene with access :=
-    { name := "Sales", series := #["North", "South"], points := 5, view := some ⟨axis, axis⟩,
+    { name := "Sales", series := #["North", "South"], points := 5, view := some ⟨axis, { axis with length := 200 }⟩,
       header := #["Month", "North", "South"],
       rows := #[#["Jan", "1", "2"], #["Feb", "3", "4"]] } }
 

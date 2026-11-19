@@ -366,3 +366,85 @@ test('the data is available as a table that can be shown', async () => {
   assert.equal(await shown(), true);
   await context.close();
 });
+
+const gesture = async (page, steps) => {
+  await page.evaluate(() => {
+    window.views = []; window.pointers = [];
+    const el = document.querySelector('inkproof-accessible-chart');
+    el.addEventListener('inkproof-view', e => window.views.push(e.detail));
+    el.addEventListener('inkproof-pointer', e => window.pointers.push(e.detail));
+  });
+  await page.evaluate(steps => {
+    const el = document.querySelector('inkproof-accessible-chart');
+    const rect = el.getBoundingClientRect();
+    for (const [type, init] of steps) {
+      const { x, y, ...rest } = init;
+      const options = { bubbles: true, cancelable: true, clientX: rect.left + x, clientY: rect.top + y, pointerType: 'touch', isPrimary: true, ...rest };
+      el.dispatchEvent(type === 'wheel' ? new WheelEvent(type, options) : new PointerEvent(type, options));
+    }
+  }, steps);
+};
+const lastView = page => page.evaluate(() => window.views.at(-1));
+
+test('the wheel zooms about the pointer and keeps the data under it', async () => {
+  const { page, context } = await open('/accessible.html');
+  await drawn(page, 1);
+  await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200 }]]);
+  const view = await lastView(page);
+  assert.ok(view.xEnd - view.xStart < 100, 'wheel up zooms in');
+  const under = view.xStart + (view.xEnd - view.xStart) * 100 / 400;
+  assert.ok(Math.abs(under - 25) < 1e-6, 'the data under the pointer stays under it');
+  await gesture(page, [['wheel', { x: 100, y: 100, deltaY: 100000 }]]);
+  assert.deepEqual(await lastView(page), { xStart: 0, xEnd: 100, yStart: 0, yEnd: 100 }, 'zoom out stops at the limit');
+  await context.close();
+});
+
+test('dragging pans the view with the content', async () => {
+  const { page, context } = await open('/accessible.html');
+  await drawn(page, 1);
+  await keyed(page, '+');
+  const before = await lastView(page);
+  await gesture(page, [['pointerdown', { x: 200, y: 100, pointerId: 1 }], ['pointermove', { x: 240, y: 100, pointerId: 1 }], ['pointerup', { x: 240, y: 100, pointerId: 1 }]]);
+  const after = await lastView(page);
+  assert.ok(after.xStart < before.xStart, 'dragging right moves the content right, so the range moves left');
+  assert.equal(after.xEnd - after.xStart, before.xEnd - before.xStart);
+  assert.equal(after.yStart, before.yStart);
+  await context.close();
+});
+
+test('shift-dragging zooms to the box, and a tiny one does nothing', async () => {
+  const { page, context } = await open('/accessible.html');
+  await drawn(page, 1);
+  await gesture(page, [['pointerdown', { x: 100, y: 50, pointerId: 1, shiftKey: true }], ['pointermove', { x: 200, y: 100, pointerId: 1 }], ['pointerup', { x: 200, y: 100, pointerId: 1 }]]);
+  const view = await lastView(page);
+  assert.ok(Math.abs(view.xStart - 25) < 1e-6 && Math.abs(view.xEnd - 50) < 1e-6);
+  assert.ok(Math.abs(view.yStart - 50) < 1e-6 && Math.abs(view.yEnd - 75) < 1e-6, 'screen y grows downward, data y upward');
+  await gesture(page, [['pointerdown', { x: 100, y: 50, pointerId: 1, shiftKey: true }], ['pointerup', { x: 101, y: 51, pointerId: 1 }]]);
+  assert.equal(await lastView(page), undefined);
+  await context.close();
+});
+
+test('two fingers pinch to zoom and pan', async () => {
+  const { page, context } = await open('/accessible.html');
+  await drawn(page, 1);
+  await gesture(page, [
+    ['pointerdown', { x: 150, y: 100, pointerId: 1 }], ['pointerdown', { x: 250, y: 100, pointerId: 2 }],
+    ['pointermove', { x: 100, y: 100, pointerId: 1 }], ['pointermove', { x: 300, y: 100, pointerId: 2 }]]);
+  const zoomed = await lastView(page);
+  assert.ok(zoomed.xEnd - zoomed.xStart < 100, 'fingers moving apart zoom in');
+  assert.ok(zoomed.xStart > 0 && zoomed.xEnd < 100);
+  await gesture(page, [['pointermove', { x: 140, y: 100, pointerId: 1 }], ['pointermove', { x: 340, y: 100, pointerId: 2 }]]);
+  const panned = await lastView(page);
+  assert.ok(panned.xStart < zoomed.xStart, 'both fingers moving right drags the content right');
+  await context.close();
+});
+
+test('the data position under the pointer is reported, and nothing is while it is outside', async () => {
+  const { page, context } = await open('/accessible.html');
+  await drawn(page, 1);
+  await gesture(page, [['pointermove', { x: 100, y: 50, pointerId: 1, pointerType: 'mouse' }], ['pointermove', { x: 500, y: 50, pointerId: 1, pointerType: 'mouse' }]]);
+  const pointers = await page.evaluate(() => window.pointers);
+  assert.equal(pointers.length, 1);
+  assert.ok(Math.abs(pointers[0].x - 25) < 1e-6 && Math.abs(pointers[0].y - 75) < 1e-6);
+  await context.close();
+});

@@ -1,7 +1,8 @@
 # Changelog
 
-## [0.4.10]
+## [0.5.0]
 
+- The chart zooms, pans and box-zooms from a wheel, drag or pinch, and reports the data position under the pointer as `inkproof-pointer`.
 - When the last chart is removed the host deletes the buffers and programs it still holds.
 
 ## [0.4.9]
