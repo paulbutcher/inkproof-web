@@ -110,6 +110,7 @@ private structure Chart where
   pointers : IO.Ref (Array (Nat × Px))
   boxStart : IO.Ref (Option Px)
   boxConfig : IO.Ref BoxConfig
+  dragMode : IO.Ref DragMode
   frame : IO.Ref Frame
   scheduled : IO.Ref Bool
   alive : IO.Ref Bool
@@ -295,6 +296,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}
+    dragMode := ← IO.mkRef .pan
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none
@@ -390,7 +392,8 @@ private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
   -- A pointer the browser no longer considers active cannot be captured; the gesture still works.
   try c.el.callMethod "setPointerCapture" #[toJS id] Unit
   catch e => log .warn "pointer capture failed, continuing without it" [("error", toString e)]
-  c.boxStart.set (if (← c.pointers.get).size == 1 && (← event.get "shiftKey" Bool) then some p else none)
+  let boxes := (← c.dragMode.get).boxes (← event.get "shiftKey" Bool)
+  c.boxStart.set (if (← c.pointers.get).size == 1 && boxes then some p else none)
 
 private def onPointerMove (c : Chart) (event : Value) : IO Unit := do
   let some (_, navConfig, nav) ← navigable c | return
@@ -429,10 +432,12 @@ private def load (c : Chart) (loader : String → Async Scene) : Async Unit := d
   let level ← getAttr c.el "log-level"
   let boxAxes ← getAttr c.el "box-zoom"
   let boxMin ← getAttr c.el "box-min"
-  match ChartAttrs.parse src level, BoxConfig.parse boxAxes boxMin with
-  | .error message, _ | _, .error message => fail c message []
-  | .ok attrs, .ok box =>
+  let drag ← getAttr c.el "drag"
+  match ChartAttrs.parse src level, BoxConfig.parse boxAxes boxMin, DragMode.parse drag with
+  | .error message, _, _ | _, .error message, _ | _, _, .error message => fail c message []
+  | .ok attrs, .ok box, .ok mode =>
     c.boxConfig.set box
+    c.dragMode.set mode
     if let some l := attrs.logLevel then setThreshold l
     c.generation.modify (· + 1)
     let generation ← c.generation.get

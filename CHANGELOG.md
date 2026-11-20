@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.10.0]
+
+- The `drag` attribute (`pan` by default, or `box`) makes a plain drag draw the box zoom and shift-drag pan; `DragMode` is the pure choice.
+
 ## [0.9.1]
 
 - Requires Gpu v0.10.0 and regenerates `gpu-js` from it, so pixel-size strokes and markers draw.

@@ -60,7 +60,12 @@ def boxMinCase : TestCase :=
     let zero := match BoxConfig.parse none (some "0") with | .error _ => true | .ok _ => false
     check zero "zero accepted"
 
+def dragCase : TestCase :=
+  .mk "an unknown drag value is refused" do
+    let bad := match DragMode.parse (some "zoom") with | .error _ => true | .ok _ => false
+    check bad "zoom accepted"
+
 def tests : List TestCase :=
-  [sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase]
+  [sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase, dragCase]
 
 end InkproofWebTest

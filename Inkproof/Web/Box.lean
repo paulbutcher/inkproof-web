@@ -60,4 +60,39 @@ theorem parse_minDistance_invalid (s : String) (h : s.toNat? = none) : ∃ e, pa
 
 end BoxConfig
 
+/-- What a drag with one pointer does: pan the view or draw a box to zoom to. Shift swaps the two. -/
+inductive DragMode where
+  | pan
+  | box
+  deriving DecidableEq
+
+namespace DragMode
+
+/-- Whether a drag started with the shift key in the given state draws a box. -/
+def boxes (m : DragMode) (shift : Bool) : Bool :=
+  match m with
+  | .pan => shift
+  | .box => !shift
+
+theorem boxes_pan (shift : Bool) : DragMode.pan.boxes shift = shift := rfl
+
+theorem boxes_box (shift : Bool) : DragMode.box.boxes shift = !shift := rfl
+
+/-- Validate the raw `drag` value. A missing one is `pan`. -/
+def parse : Option String → Except String DragMode
+  | none | some "pan" => .ok .pan
+  | some "box" => .ok .box
+  | some s => .error s!"attribute drag is \"{s}\", expected pan or box"
+
+theorem parse_none : parse none = .ok .pan := rfl
+
+theorem parse_box : parse (some "box") = .ok .box := rfl
+
+theorem parse_invalid (s : String) (h : s ≠ "pan" ∧ s ≠ "box") : ∃ e, parse (some s) = .error e := by
+  obtain ⟨h₁, h₂⟩ := h
+  unfold parse
+  split <;> first | exact ⟨_, rfl⟩ | simp_all
+
+end DragMode
+
 end Inkproof.Web

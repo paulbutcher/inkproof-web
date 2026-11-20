@@ -479,6 +479,19 @@ test('a box zoom set to x changes only x, and a drag shorter than box-min change
   await context.close();
 });
 
+test('with drag=box a plain drag zooms to the box and shift-drag pans', async () => {
+  const { page, context } = await open('/dragbox.html');
+  await drawn(page, 1);
+  await gesture(page, [['pointerdown', { x: 100, y: 50, pointerId: 1 }], ['pointermove', { x: 200, y: 100, pointerId: 1 }], ['pointerup', { x: 200, y: 100, pointerId: 1 }]]);
+  const view = await lastView(page);
+  assert.ok(Math.abs(view.xStart - 25) < 1e-6 && Math.abs(view.xEnd - 50) < 1e-6);
+  await gesture(page, [['pointerdown', { x: 200, y: 100, pointerId: 1, shiftKey: true }], ['pointermove', { x: 240, y: 100, pointerId: 1 }], ['pointerup', { x: 240, y: 100, pointerId: 1 }]]);
+  const panned = await lastView(page);
+  assert.ok(panned.xStart < view.xStart, 'shift-drag pans');
+  assert.equal(panned.xEnd - panned.xStart, view.xEnd - view.xStart);
+  await context.close();
+});
+
 test('two fingers pinch to zoom and pan', async () => {
   const { page, context } = await open('/accessible.html');
   await drawn(page, 1);

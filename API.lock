@@ -43,6 +43,18 @@ theorem Inkproof.Web.Command.ofKey_tab : ∀ (shift : Bool), Inkproof.Web.Comman
 constructor Inkproof.Web.Command.previousSeries : Inkproof.Web.Command
 constructor Inkproof.Web.Command.reset : Inkproof.Web.Command
 constructor Inkproof.Web.Command.view : Inkproof.Viewport.Key → Inkproof.Web.Command
+inductive Inkproof.Web.DragMode : Type
+constructor Inkproof.Web.DragMode.box : Inkproof.Web.DragMode
+def Inkproof.Web.DragMode.boxes : Inkproof.Web.DragMode → Bool → Bool
+theorem Inkproof.Web.DragMode.boxes_box : ∀ (shift : Bool), Inkproof.Web.DragMode.box.boxes shift = !shift
+theorem Inkproof.Web.DragMode.boxes_pan : ∀ (shift : Bool), Inkproof.Web.DragMode.pan.boxes shift = shift
+def Inkproof.Web.DragMode.ofNat : Nat → Inkproof.Web.DragMode
+theorem Inkproof.Web.DragMode.ofNat_ctorIdx : ∀ (x : Inkproof.Web.DragMode), Inkproof.Web.DragMode.ofNat x.ctorIdx = x
+constructor Inkproof.Web.DragMode.pan : Inkproof.Web.DragMode
+def Inkproof.Web.DragMode.parse : Option String → Except String Inkproof.Web.DragMode
+theorem Inkproof.Web.DragMode.parse_box : Inkproof.Web.DragMode.parse (Option.some "box") = Except.ok Inkproof.Web.DragMode.box
+theorem Inkproof.Web.DragMode.parse_invalid : ∀ (s : String), s ≠ "pan" ∧ s ≠ "box" → ∃ e, Inkproof.Web.DragMode.parse (Option.some s) = Except.error e
+theorem Inkproof.Web.DragMode.parse_none : Inkproof.Web.DragMode.parse Option.none = Except.ok Inkproof.Web.DragMode.pan
 structure Inkproof.Web.Frame : Type
 field Inkproof.Web.Frame.dirty : Inkproof.Web.Frame → Bool
 def Inkproof.Web.Frame.drawn : Inkproof.Web.Frame → Inkproof.Web.Frame
@@ -134,6 +146,7 @@ instance Inkproof.Web.instDecidableEqChartAttrs : DecidableEq Inkproof.Web.Chart
 def Inkproof.Web.instDecidableEqChartAttrs.decEq : (x x_1 : Inkproof.Web.ChartAttrs) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqCommand : DecidableEq Inkproof.Web.Command
 def Inkproof.Web.instDecidableEqCommand.decEq : (x x_1 : Inkproof.Web.Command) → Decidable (x = x_1)
+instance Inkproof.Web.instDecidableEqDragMode : DecidableEq Inkproof.Web.DragMode
 instance Inkproof.Web.instDecidableEqFrame : DecidableEq Inkproof.Web.Frame
 def Inkproof.Web.instDecidableEqFrame.decEq : (x x_1 : Inkproof.Web.Frame) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqLevel : DecidableEq Inkproof.Web.Level
