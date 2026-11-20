@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.11.0]
+
+- The `group` attribute links chart elements: those with the same name follow one another's x range from pointer and key input, and one that drops or changes the attribute stops following.
+
 ## [0.10.0]
 
 - The `drag` attribute (`pan` by default, or `box`) makes a plain drag draw the box zoom and shift-drag pan; `DragMode` is the pure choice.

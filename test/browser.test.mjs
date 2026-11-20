@@ -533,3 +533,33 @@ test('replacing the scene keeps the view, and a reset returns to home', async ()
   assert.deepEqual(messages.filter(m => m.type === 'error' || m.type === 'warning'), []);
   await context.close();
 });
+
+test('charts in one group follow each other in x, and one that leaves stops following', async () => {
+  const { page, context } = await open('/grouped.html');
+  await drawn(page, 2);
+  const wheel = id => page.evaluate(id => {
+    const el = document.getElementById(id);
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: rect.left + 100, clientY: rect.top + 100, deltaY: -200 }));
+  }, id);
+  const watch = () => page.evaluate(() => {
+    window.seen = { a: [], b: [] };
+    for (const id of ['a', 'b']) document.getElementById(id).addEventListener('inkproof-view', e => window.seen[id].push(e.detail));
+  });
+  await watch();
+  await wheel('a');
+  const [a, b] = await page.evaluate(() => [window.seen.a.at(-1), window.seen.b.at(-1)]);
+  assert.ok(a.xEnd - a.xStart < 100, 'the wheel zoomed a');
+  assert.equal(b.xStart, a.xStart);
+  assert.equal(b.xEnd, a.xEnd);
+  assert.equal(b.yEnd - b.yStart, 100, 'y stays with the chart');
+  await page.evaluate(() => document.getElementById('b').removeAttribute('group'));
+  await watch();
+  await wheel('a');
+  assert.equal(await page.evaluate(() => window.seen.b.length), 0, 'an unlinked chart does not follow');
+  await page.evaluate(() => document.getElementById('b').setAttribute('group', 'g'));
+  const joined = await page.evaluate(() => window.seen.b.at(-1));
+  const now = await page.evaluate(() => window.seen.a.at(-1));
+  assert.equal(joined.xStart, now.xStart, 'relinking takes the group x range');
+  await context.close();
+});

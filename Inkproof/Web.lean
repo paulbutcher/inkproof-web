@@ -10,5 +10,6 @@ import Inkproof.Web.Text
 import Inkproof.Web.Access
 import Inkproof.Web.Pointer
 import Inkproof.Web.Box
+import Inkproof.Web.Group
 
 /-! # Inkproof.Web -/

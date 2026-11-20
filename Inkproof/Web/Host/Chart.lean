@@ -7,12 +7,14 @@ import Lasm.JS.Web.Support
 import Lasm.JS.Web.Fetch
 import Std.Data.HashMap
 import Inkproof.Viewport.Gesture
+import Inkproof.Viewport.Linked
 import Inkproof.Web.Surface
 import Inkproof.Web.Frame
 import Inkproof.Web.Attr
 import Inkproof.Web.Access
 import Inkproof.Web.Pointer
 import Inkproof.Web.Box
+import Inkproof.Web.Group
 import Inkproof.Web.Host.Console
 import Inkproof.Web.Host.Gpu
 import Inkproof.Web.Host.Element
@@ -110,6 +112,7 @@ private structure Chart where
   pointers : IO.Ref (Array (Nat × Px))
   boxStart : IO.Ref (Option Px)
   boxConfig : IO.Ref BoxConfig
+  group : IO.Ref (Option String)
   dragMode : IO.Ref DragMode
   frame : IO.Ref Frame
   scheduled : IO.Ref Bool
@@ -295,7 +298,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
   return {
     id, el, canvas, ctx, announcer, table
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
-    boxConfig := ← IO.mkRef {}
+    boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
     dragMode := ← IO.mkRef .pan
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
@@ -333,16 +336,43 @@ private def publish (c : Chart) (access : Access) : IO Unit := do
   c.nav.set (access.view.map fun v => Nav.home ⟨v, access.points, access.series.size⟩)
   describe c access
 
-/-- Make `next` the chart's state, telling the application and assistive technology of what changed from `nav`. -/
+private def announceView (c : Chart) (scene : Scene) (view : View Float) : IO Unit := do
+  let x := view.x
+  let y := view.y
+  dispatch c.el "inkproof-view" (obj [("xStart", toJS x.start), ("xEnd", toJS (x.start + x.span)),
+    ("yStart", toJS y.start), ("yEnd", toJS (y.start + y.span))])
+  refreshSummary c scene.access
+  setText c (scene.access.summaryText (some view))
+
+/-- The charts in `name` that can be navigated, in the order they connected, with their state. -/
+private def peers (name : String) : IO (Array (Chart × Scene × Nav)) := do
+  let mut found := #[]
+  for (_, c) in (← live.get).toArray.qsort (·.1 < ·.1) do
+    if (← c.group.get) == some name then
+      if let (some scene, some nav) := (← c.scene.get, ← c.nav.get) then
+        if scene.access.view.isSome then found := found.push (c, scene, nav)
+  return found
+
+/-- Give every other chart in `origin`'s group the x range of `view`, which is the origin's, and tell each that changed. -/
+private def followFrom (origin : Chart) (view : View Float) : IO Unit := do
+  let some name ← origin.group.get | return
+  let members ← peers name
+  let some i := members.findIdx? (·.1.id == origin.id) | return
+  let views := Linked.followArray (members.map (·.2.2.view)) i view
+  for h : j in [0:members.size] do
+    let (c, scene, nav) := members[j]
+    let next := views[j]?.getD nav.view
+    if j != i && next != nav.view then
+      c.nav.set (some { nav with view := next })
+      log .debug "chart followed its group" [("group", name), ("chart", toString c.id)]
+      announceView c scene next
+
+/-- Make `next` the chart's state, telling the application and assistive technology of what changed from `nav`, and the chart's group of a new x range. -/
 private def commit (c : Chart) (scene : Scene) (nav next : Nav) : IO Unit := do
   c.nav.set (some next)
   if next.view != nav.view then
-    let x := next.view.x
-    let y := next.view.y
-    dispatch c.el "inkproof-view" (obj [("xStart", toJS x.start), ("xEnd", toJS (x.start + x.span)),
-      ("yStart", toJS y.start), ("yEnd", toJS (y.start + y.span))])
-    refreshSummary c scene.access
-    setText c (scene.access.summaryText (some next.view))
+    announceView c scene next.view
+    followFrom c next.view
   if next.point != nav.point || next.series != nav.series then
     dispatch c.el "inkproof-cursor" (obj [("series", toJS next.series), ("point", toJS next.point)])
     setText c (scene.access.cursorText next)
@@ -427,17 +457,24 @@ private def onPointerUp (c : Chart) (event : Value) : IO Unit := do
         if let some input := (← c.boxConfig.get).input navConfig.view start (← position c event) then applyInputs c [input]
   c.pointers.modify (·.filter (·.1 != id))
 
+/-- Take the x range of the chart's group, if others are in it. -/
+private def joinGroup (c : Chart) : IO Unit := do
+  let some name ← c.group.get | return
+  if let some (p, _, nav) := (← peers name).find? (·.1.id != c.id) then followFrom p nav.view
+
 private def load (c : Chart) (loader : String → Async Scene) : Async Unit := do
   let src ← getAttr c.el "src"
   let level ← getAttr c.el "log-level"
   let boxAxes ← getAttr c.el "box-zoom"
   let boxMin ← getAttr c.el "box-min"
   let drag ← getAttr c.el "drag"
-  match ChartAttrs.parse src level, BoxConfig.parse boxAxes boxMin, DragMode.parse drag with
-  | .error message, _, _ | _, .error message, _ | _, _, .error message => fail c message []
-  | .ok attrs, .ok box, .ok mode =>
+  let groupName ← getAttr c.el "group"
+  match ChartAttrs.parse src level, BoxConfig.parse boxAxes boxMin, DragMode.parse drag, Group.parse groupName with
+  | .error message, _, _, _ | _, .error message, _, _ | _, _, .error message, _ | _, _, _, .error message => fail c message []
+  | .ok attrs, .ok box, .ok mode, .ok group =>
     c.boxConfig.set box
     c.dragMode.set mode
+    c.group.set group
     if let some l := attrs.logLevel then setThreshold l
     c.generation.modify (· + 1)
     let generation ← c.generation.get
@@ -447,6 +484,7 @@ private def load (c : Chart) (loader : String → Async Scene) : Async Unit := d
       if (← c.generation.get) == generation && (← c.alive.get) then
         c.scene.set (some scene)
         publish c scene.access
+        joinGroup c
         invalidate c
     catch e =>
       fail c s!"loading the chart failed: {e}" [("src", attrs.src)]
@@ -520,15 +558,26 @@ private def disconnect (args : Array Data) : IO Data := do
         generation.modify (· + 1)
   return .undefined
 
+/-- A change of `group` moves the chart between groups without reloading it. -/
+private def regroup (c : Chart) (value : Option String) : IO Unit := do
+  match Group.parse value with
+  | .error message => fail c message []
+  | .ok group =>
+    c.group.set group
+    joinGroup c
+
 private def changed (loader : String → Async Scene) (args : Array Data) : Async Unit := do
   if let some c ← chartOf args then
-    if (← c.alive.get) then load c loader
+    if (← c.alive.get) then
+      match args[1]? with
+      | some (.string "group") => regroup c (← getAttr c.el "group")
+      | _ => load c loader
 
 /-- Define the custom element `tag`: it draws the scene `loader` makes of its `src` attribute. -/
 def register (tag : String) (loader : String → Async Scene := fetchScene) : IO Unit := do
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level"]
+  defineElement tag #["src", "log-level", "group"]
     (← Function.ofFn (connect loader · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))
