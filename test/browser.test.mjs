@@ -313,11 +313,11 @@ test('a tile query sums the tiles it touches and leaves the main thread free', a
 const keyed = async (page, ...keys) => {
   await page.evaluate(() => {
     window.views = []; window.cursors = [];
-    const el = document.querySelector('inkproof-accessible-chart, inkproof-replacing-chart');
+    const el = document.querySelector('inkproof-accessible-chart, inkproof-replacing-chart, inkproof-inset-chart');
     el.addEventListener('inkproof-view', e => window.views.push(e.detail));
     el.addEventListener('inkproof-cursor', e => window.cursors.push(e.detail));
   });
-  await page.locator('inkproof-accessible-chart, inkproof-replacing-chart').focus();
+  await page.locator('inkproof-accessible-chart, inkproof-replacing-chart, inkproof-inset-chart').focus();
   for (const key of keys) await page.keyboard.press(key);
 };
 const announced = page => page.evaluate(() => document.querySelector('inkproof-accessible-chart').shadowRoot.querySelector('[aria-live]').textContent);
@@ -396,12 +396,12 @@ test('the data is available as a table that can be shown', async () => {
 const gesture = async (page, steps) => {
   await page.evaluate(() => {
     window.views = []; window.pointers = [];
-    const el = document.querySelector('inkproof-accessible-chart, inkproof-replacing-chart');
+    const el = document.querySelector('inkproof-accessible-chart, inkproof-replacing-chart, inkproof-inset-chart');
     el.addEventListener('inkproof-view', e => window.views.push(e.detail));
     el.addEventListener('inkproof-pointer', e => window.pointers.push(e.detail));
   });
   await page.evaluate(steps => {
-    const el = document.querySelector('inkproof-accessible-chart, inkproof-replacing-chart');
+    const el = document.querySelector('inkproof-accessible-chart, inkproof-replacing-chart, inkproof-inset-chart');
     const rect = el.getBoundingClientRect();
     for (const [type, init] of steps) {
       const { x, y, ...rest } = init;
@@ -422,6 +422,23 @@ test('the wheel zooms about the pointer and keeps the data under it', async () =
   assert.ok(Math.abs(under - 25) < 1e-6, 'the data under the pointer stays under it');
   await gesture(page, [['wheel', { x: 100, y: 100, deltaY: 100000 }]]);
   assert.deepEqual(await lastView(page), { xStart: 0, xEnd: 100, yStart: 0, yEnd: 100 }, 'zoom out stops at the limit');
+  await context.close();
+});
+
+test('positions are taken from the plot, which is inset in the element', async () => {
+  const { page, context } = await open('/inset.html');
+  await drawn(page, 1);
+  await gesture(page, [['wheel', { x: 60 + 200, y: 20 + 100, deltaY: -200 }]]);
+  const view = await lastView(page);
+  assert.ok(Math.abs((view.xStart + view.xEnd) / 2 - 50) < 1e-6, 'a wheel at the plot centre zooms about the centre of the range');
+  assert.ok(Math.abs((view.yStart + view.yEnd) / 2 - 50) < 1e-6);
+  await gesture(page, [['pointermove', { x: 60, y: 20, pointerId: 1 }]]);
+  const top = await page.evaluate(() => window.pointers.at(-1));
+  assert.ok(top, 'the plot top left reports a position');
+  await gesture(page, [['pointermove', { x: 30, y: 100, pointerId: 1 }]]);
+  assert.equal(await page.evaluate(() => window.pointers.length), 0, 'over the axis labels nothing is reported');
+  await gesture(page, [['wheel', { x: 30, y: 100, deltaY: -200 }], ['pointerdown', { x: 30, y: 100, pointerId: 2 }], ['pointermove', { x: 90, y: 100, pointerId: 2 }]]);
+  assert.equal((await page.evaluate(() => window.views)).length, 0, 'outside the plot no gesture starts');
   await context.close();
 });
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.0]
+
+- `Access.plotOrigin` says where the plot lies in the element; pointer positions are taken from it, and a pointer outside the plot starts no gesture and reports no position.
+
 ## [0.7.0]
 
 - `Host.setScene` replaces a chart's scene keeping its `Nav`, and `Host.apply` applies a `Command` to a chart, with `Nav.clamp` keeping the cursor inside the new data.

@@ -2,8 +2,9 @@ structure Inkproof.Web.Access : Type
 def Inkproof.Web.Access.cursorText : Inkproof.Web.Access → Inkproof.Web.Nav → String
 theorem Inkproof.Web.Access.cursorText_eq : ∀ (a : Inkproof.Web.Access) (n : Inkproof.Web.Nav), a.cursorText n = ToString.toString (a.series[n.series]?.getD (ToString.toString "series " ++ ToString.toString (n.series + 1))) ++ ToString.toString ", point " ++ ToString.toString (n.point + 1) ++ ToString.toString " of " ++ ToString.toString a.points
 field Inkproof.Web.Access.header : Inkproof.Web.Access → Array String
-constructor Inkproof.Web.Access.mk : String → Array String → Nat → Option String → Array String → Array (Array String) → Option (Inkproof.Viewport.ViewConfig Float) → Inkproof.Web.Access
+constructor Inkproof.Web.Access.mk : String → Array String → Nat → Option String → Array String → Array (Array String) → Option (Inkproof.Viewport.ViewConfig Float) → Float × Float → Inkproof.Web.Access
 field Inkproof.Web.Access.name : Inkproof.Web.Access → String
+field Inkproof.Web.Access.plotOrigin : Inkproof.Web.Access → Float × Float
 field Inkproof.Web.Access.points : Inkproof.Web.Access → Nat
 field Inkproof.Web.Access.rows : Inkproof.Web.Access → Array (Array String)
 field Inkproof.Web.Access.series : Inkproof.Web.Access → Array String

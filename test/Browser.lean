@@ -37,6 +37,11 @@ def accessibleScene (src : String) : Async Scene := do
       header := #["Month", "North", "South"],
       rows := #[#["Jan", "1", "2"], #["Feb", "3", "4"]] } }
 
+/-- The same chart with its plot inset by 60 pixels from the left and 20 from the top, in an element large enough to hold it. -/
+def insetScene (src : String) : Async Scene := do
+  let scene ← accessibleScene src
+  return { scene with access := { scene.access with plotOrigin := (60, 20) } }
+
 /-- Answer each view change of `el` with a new scene built from `base`, here the same data with a label naming the range, which keeps the chart's view; a `test-reset` event on `el` resets it. -/
 private def answerViews (el : Value) (base : IO.Ref (Option Scene)) : IO Unit := do
   let onView ← Function.ofSyncFn fun args => do
@@ -56,6 +61,7 @@ def main : IO Unit := do
     let scene ← accessibleScene src
     base.set (some scene)
     return scene
+  register "inkproof-inset-chart" insetScene
   register "inkproof-chart"
   register "inkproof-labelled-chart" labelledScene
   register "inkproof-turned-chart" turnedScene

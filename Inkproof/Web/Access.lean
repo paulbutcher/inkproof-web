@@ -129,6 +129,8 @@ structure Access where
   rows : Array (Array String) := #[]
   /-- Without it the chart has no view for keys to change. -/
   view : Option (ViewConfig Float) := none
+  /-- Where the plot's top left lies in the element, in CSS pixels; its size is the view configuration's two lengths. Pointer positions are taken from here. -/
+  plotOrigin : Float × Float := (0, 0)
 
 /-- A number as people write it: no trailing zeros, and no point on a whole number. -/
 def showFloat (f : Float) : String :=

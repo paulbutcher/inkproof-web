@@ -357,10 +357,12 @@ private def onKey (c : Chart) (event : Value) : IO Unit := do
   event.callMethod "preventDefault" #[] Unit
   commit c scene nav (nav.apply navConfig command)
 
+/-- The pointer's position in pixels from the plot's top left. -/
 private def position (c : Chart) (event : Value) : IO Px := do
   let rect ← c.el.callMethod "getBoundingClientRect" #[]
-  return ((← event.get "clientX" Float) - (← rect.get "left" Float),
-          (← event.get "clientY" Float) - (← rect.get "top" Float))
+  let origin := ((← c.scene.get).map (·.access.plotOrigin)).getD (0, 0)
+  return ((← event.get "clientX" Float) - (← rect.get "left" Float) - origin.1,
+          (← event.get "clientY" Float) - (← rect.get "top" Float) - origin.2)
 
 private def applyInputs (c : Chart) (inputs : List (Input Float)) : IO Unit := do
   let some (scene, navConfig, nav) ← navigable c | return
@@ -368,16 +370,19 @@ private def applyInputs (c : Chart) (inputs : List (Input Float)) : IO Unit := d
 
 private def onWheel (c : Chart) (event : Value) : IO Unit := do
   let some (_, navConfig, _) ← navigable c | return
+  let pos ← position c event
+  unless Gesture.inside navConfig.view pos do return
   event.callMethod "preventDefault" #[] Unit
   let scale : Float := if (← event.get "deltaMode" Nat) == 1 then 16 else 1
-  let p := Gesture.toView navConfig.view (← position c event)
+  let p := Gesture.toView navConfig.view pos
   let factor := Gesture.wheelFactor (scale * (← event.get "deltaY" Float))
   applyInputs c [.wheel p.1 p.2 factor]
 
 private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
-  let some _ ← navigable c | return
+  let some (_, navConfig, _) ← navigable c | return
   let id ← event.get "pointerId" Nat
   let p ← position c event
+  unless Gesture.inside navConfig.view p do return
   c.pointers.modify (·.filter (·.1 != id) |>.push (id, p))
   -- A pointer the browser no longer considers active cannot be captured; the gesture still works.
   try c.el.callMethod "setPointerCapture" #[toJS id] Unit
