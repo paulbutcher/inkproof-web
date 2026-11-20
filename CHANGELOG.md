@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.9.0]
+
+- The `box-zoom` and `box-min` attributes choose which axes a shift-drag box zooms and the least drag that counts; `BoxConfig` is the pure choice, over Viewport's `Gesture.boxOver` (v0.7.0).
+
 ## [0.8.0]
 
 - `Access.plotOrigin` says where the plot lies in the element; pointer positions are taken from it, and a pointer outside the plot starts no gesture and reports no position.

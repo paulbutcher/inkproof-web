@@ -12,6 +12,7 @@ import Inkproof.Web.Frame
 import Inkproof.Web.Attr
 import Inkproof.Web.Access
 import Inkproof.Web.Pointer
+import Inkproof.Web.Box
 import Inkproof.Web.Host.Console
 import Inkproof.Web.Host.Gpu
 import Inkproof.Web.Host.Element
@@ -108,6 +109,7 @@ private structure Chart where
   listeners : IO.Ref (Array (String × Value))
   pointers : IO.Ref (Array (Nat × Px))
   boxStart : IO.Ref (Option Px)
+  boxConfig : IO.Ref BoxConfig
   frame : IO.Ref Frame
   scheduled : IO.Ref Bool
   alive : IO.Ref Bool
@@ -291,7 +293,8 @@ private def build (id : Nat) (el : Value) : IO Chart := do
   let ctx ← canvas.callMethod "getContext" #[toJS "2d"]
   return {
     id, el, canvas, ctx, announcer, table
-    nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none
+    nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
+    boxConfig := ← IO.mkRef {}
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none
@@ -418,15 +421,18 @@ private def onPointerUp (c : Chart) (event : Value) : IO Unit := do
     c.boxStart.set none
     if (← event.get "type" String) == "pointerup" then
       if let some (_, navConfig, _) ← navigable c then
-        if let some input := Gesture.box navConfig.view start (← position c event) then applyInputs c [input]
+        if let some input := (← c.boxConfig.get).input navConfig.view start (← position c event) then applyInputs c [input]
   c.pointers.modify (·.filter (·.1 != id))
 
 private def load (c : Chart) (loader : String → Async Scene) : Async Unit := do
   let src ← getAttr c.el "src"
   let level ← getAttr c.el "log-level"
-  match ChartAttrs.parse src level with
-  | .error message => fail c message []
-  | .ok attrs =>
+  let boxAxes ← getAttr c.el "box-zoom"
+  let boxMin ← getAttr c.el "box-min"
+  match ChartAttrs.parse src level, BoxConfig.parse boxAxes boxMin with
+  | .error message, _ | _, .error message => fail c message []
+  | .ok attrs, .ok box =>
+    c.boxConfig.set box
     if let some l := attrs.logLevel then setThreshold l
     c.generation.modify (· + 1)
     let generation ← c.generation.get

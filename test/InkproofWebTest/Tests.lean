@@ -50,6 +50,17 @@ def attrCase : TestCase :=
       | .error _ => .ok ()
       | .ok a => .error s!"accepted {repr a}"
 
-def tests : List TestCase := [sizingCase, cacheCase, unmeasuredCase, logCase, attrCase]
+open Inkproof.Viewport in
+def plot : ViewConfig Float :=
+  let axis : Interval.Config Float := ⟨300, 1, 1000, ⟨0, 100⟩, 2, 0.1⟩
+  ⟨axis, axis⟩
+
+def boxMinCase : TestCase :=
+  .mk "a zero box-min is refused" do
+    let zero := match BoxConfig.parse none (some "0") with | .error _ => true | .ok _ => false
+    check zero "zero accepted"
+
+def tests : List TestCase :=
+  [sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase]
 
 end InkproofWebTest

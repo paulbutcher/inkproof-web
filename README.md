@@ -24,6 +24,7 @@ Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser
 - Control a chart from the keyboard (zoom, pan, cursor, series): `Command.ofKey`, `Nav`, `Nav.apply`, `NavConfig`.
 - Give a chart a new scene without losing its zoom, cursor or series, and apply a command such as reset from the page: `Host.setScene`, `Host.apply`.
 - Zoom, pan and box-zoom a chart with the wheel, a drag, shift-drag or a two-finger pinch, and learn the data position under the pointer from the `inkproof-pointer` event: `Nav.input`, with the conversions from Viewport's `Gesture`; a plot inset in the element, for axis labels beside it, is placed by `Access.plotOrigin`.
+- Choose which axes a shift-drag box zooms (x, y, both or the dominant direction of the drag) and the least drag that counts, by the `box-zoom` and `box-min` attributes: `BoxConfig`, `BoxConfig.input`, `BoxConfig.parse`.
 - Describe a chart for assistive technology, with a name, a summary, a cursor reading and a data table: `Access`, `Access.summaryText`, `Access.cursorText`.
 - Format numbers and lines of text for those descriptions: `showFloat`, `formatLine`, `describe`.
 - Fetch a tile, or a byte range of a file, with the status checked and a failure logged: `Host.fetchTile`.

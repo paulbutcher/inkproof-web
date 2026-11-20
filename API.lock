@@ -12,6 +12,18 @@ field Inkproof.Web.Access.summary : Inkproof.Web.Access → Option String
 def Inkproof.Web.Access.summaryText : Inkproof.Web.Access → Option (Inkproof.Viewport.View Float) → String
 theorem Inkproof.Web.Access.summaryText_some : ∀ (a : Inkproof.Web.Access) (s : String) (v : Option (Inkproof.Viewport.View Float)), a.summary = Option.some s → a.summaryText v = s
 field Inkproof.Web.Access.view : Inkproof.Web.Access → Option (Inkproof.Viewport.ViewConfig Float)
+structure Inkproof.Web.BoxConfig : Type
+field Inkproof.Web.BoxConfig.axes : Inkproof.Web.BoxConfig → Inkproof.Viewport.Gesture.Axes
+def Inkproof.Web.BoxConfig.input : Inkproof.Web.BoxConfig → Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.Px → Inkproof.Viewport.Px → Option (Inkproof.Viewport.Input Float)
+theorem Inkproof.Web.BoxConfig.input_default : ∀ (v : Inkproof.Viewport.ViewConfig Float) (a b : Inkproof.Viewport.Px), { }.input v a b = Inkproof.Viewport.Gesture.box v a b
+field Inkproof.Web.BoxConfig.minDistance : Inkproof.Web.BoxConfig → Float
+constructor Inkproof.Web.BoxConfig.mk : Inkproof.Viewport.Gesture.Axes → Float → Inkproof.Web.BoxConfig
+def Inkproof.Web.BoxConfig.parse : Option String → Option String → Except String Inkproof.Web.BoxConfig
+theorem Inkproof.Web.BoxConfig.parse_axes : ∀ (s : String) (a : Inkproof.Viewport.Gesture.Axes), s = "x" ∧ a = Inkproof.Viewport.Gesture.Axes.x ∨ s = "y" ∧ a = Inkproof.Viewport.Gesture.Axes.y ∨ s = "xy" ∧ a = Inkproof.Viewport.Gesture.Axes.both ∨ s = "auto" ∧ a = Inkproof.Viewport.Gesture.Axes.auto → ∃ c, Inkproof.Web.BoxConfig.parse (Option.some s) Option.none = Except.ok c ∧ c.axes = a
+theorem Inkproof.Web.BoxConfig.parse_default : ∃ c, Inkproof.Web.BoxConfig.parse Option.none Option.none = Except.ok c ∧ c.axes = Inkproof.Viewport.Gesture.Axes.both ∧ c.minDistance = Inkproof.Viewport.Gesture.minBox
+theorem Inkproof.Web.BoxConfig.parse_minDistance : ∀ (s : String) (n : Nat), s.toNat? = Option.some n → n ≠ 0 → ∃ c, Inkproof.Web.BoxConfig.parse Option.none (Option.some s) = Except.ok c ∧ c.minDistance = n.toFloat
+theorem Inkproof.Web.BoxConfig.parse_minDistance_invalid : ∀ (s : String), s.toNat? = Option.none → ∃ e, Inkproof.Web.BoxConfig.parse Option.none (Option.some s) = Except.error e
+theorem Inkproof.Web.BoxConfig.parse_minDistance_zero : ∀ (s : String), s.toNat? = Option.some 0 → ∃ e, Inkproof.Web.BoxConfig.parse Option.none (Option.some s) = Except.error e
 structure Inkproof.Web.ChartAttrs : Type
 field Inkproof.Web.ChartAttrs.logLevel : Inkproof.Web.ChartAttrs → Option Inkproof.Web.Level
 constructor Inkproof.Web.ChartAttrs.mk : String → Option Inkproof.Web.Level → Inkproof.Web.ChartAttrs

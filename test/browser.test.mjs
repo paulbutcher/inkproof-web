@@ -467,6 +467,18 @@ test('shift-dragging zooms to the box, and a tiny one does nothing', async () =>
   await context.close();
 });
 
+test('a box zoom set to x changes only x, and a drag shorter than box-min changes nothing', async () => {
+  const { page, context } = await open('/boxzoom.html');
+  await drawn(page, 1);
+  await gesture(page, [['pointerdown', { x: 100, y: 50, pointerId: 1, shiftKey: true }], ['pointerup', { x: 105, y: 150, pointerId: 1 }]]);
+  assert.equal(await lastView(page), undefined, 'a drag under 10 px along x does nothing');
+  await gesture(page, [['pointerdown', { x: 100, y: 50, pointerId: 1, shiftKey: true }], ['pointerup', { x: 200, y: 60, pointerId: 1 }]]);
+  const view = await lastView(page);
+  assert.ok(Math.abs(view.xStart - 25) < 1e-6 && Math.abs(view.xEnd - 50) < 1e-6);
+  assert.ok(Math.abs(view.yStart) < 1e-6 && Math.abs(view.yEnd - 100) < 1e-6, 'y keeps its range');
+  await context.close();
+});
+
 test('two fingers pinch to zoom and pan', async () => {
   const { page, context } = await open('/accessible.html');
   await drawn(page, 1);
