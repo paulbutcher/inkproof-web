@@ -37,8 +37,28 @@ def accessibleScene (src : String) : Async Scene := do
       header := #["Month", "North", "South"],
       rows := #[#["Jan", "1", "2"], #["Feb", "3", "4"]] } }
 
+/-- Answer each view change of `el` with a new scene built from `base`, here the same data with a label naming the range, which keeps the chart's view; a `test-reset` event on `el` resets it. -/
+private def answerViews (el : Value) (base : IO.Ref (Option Scene)) : IO Unit := do
+  let onView ← Function.ofSyncFn fun args => do
+    let some (Data.ref event _) := args[0]? | return .undefined
+    let start ← (← event.get "detail" Value).get "xStart" Float
+    if let some scene ← base.get then
+      setScene el { scene with labels := #[{ text := s!"from {start}", x := 10, y := 10 }] }
+    return .undefined
+  el.callMethod "addEventListener" #[toJS "inkproof-view", toJS onView] Unit
+  let onReset ← Function.ofSyncFn fun _ => do apply el .reset; return .undefined
+  el.callMethod "addEventListener" #[toJS "test-reset", toJS onReset] Unit
+
 def main : IO Unit := do
   register "inkproof-accessible-chart" accessibleScene
+  let base ← IO.mkRef none
+  register "inkproof-replacing-chart" fun src => do
+    let scene ← accessibleScene src
+    base.set (some scene)
+    return scene
   register "inkproof-chart"
   register "inkproof-labelled-chart" labelledScene
   register "inkproof-turned-chart" turnedScene
+  let doc ← (← global).get "document"
+  if let .ref el _ ← doc.callMethod "querySelector" #[toJS "inkproof-replacing-chart"] Data then
+    answerViews el base

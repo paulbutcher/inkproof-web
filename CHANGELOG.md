@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.7.0]
+
+- `Host.setScene` replaces a chart's scene keeping its `Nav`, and `Host.apply` applies a `Command` to a chart, with `Nav.clamp` keeping the cursor inside the new data.
+
 ## [0.6.2]
 
 - `Label.ofPlaced` and `Label.ofDrawing` turn Scene's placed axis labels into `Host.Label`s; Web requires Scene v0.11.0 and Axis v0.6.0.

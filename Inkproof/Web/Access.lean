@@ -2,6 +2,7 @@
 Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+import Inkproof.Float.RatLemmas
 import Inkproof.Viewport.View
 
 namespace Inkproof.Web
@@ -79,6 +80,22 @@ def apply (c : NavConfig) (n : Nav) : Command → Nav
   | .nextSeries => { n with series := (n.series + 1) % c.series }
   | .previousSeries => { n with series := (n.series + c.series - 1) % c.series }
   | .reset => home c
+
+/-- The state with its cursor moved back inside a chart of `points` points and `series` series. -/
+def clamp (points series : Nat) (n : Nav) : Nav :=
+  { n with point := Float.clamp 0 (points - 1) n.point, series := Float.clamp 0 (series - 1) n.series }
+
+theorem clamp_of_lt (points series : Nat) (n : Nav) (hp : n.point < points) (hs : n.series < series) :
+    clamp points series n = n := by
+  simp only [clamp, Float.clamp]; congr 1 <;> (repeat split) <;> simp_all <;> omega
+
+theorem clamp_view (points series : Nat) (n : Nav) : (clamp points series n).view = n.view := rfl
+
+theorem clamp_point_lt (points series : Nat) (n : Nav) (h : 0 < points) : (clamp points series n).point < points := by
+  simp only [clamp, Float.clamp]; (repeat split) <;> simp_all <;> (try split) <;> omega
+
+theorem clamp_series_lt (points series : Nat) (n : Nav) (h : 0 < series) : (clamp points series n).series < series := by
+  simp only [clamp, Float.clamp]; (repeat split) <;> simp_all <;> (try split) <;> omega
 
 theorem home_view (c : NavConfig) : (home c).view = View.home c.view := rfl
 

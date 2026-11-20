@@ -313,11 +313,11 @@ test('a tile query sums the tiles it touches and leaves the main thread free', a
 const keyed = async (page, ...keys) => {
   await page.evaluate(() => {
     window.views = []; window.cursors = [];
-    const el = document.querySelector('inkproof-accessible-chart');
+    const el = document.querySelector('inkproof-accessible-chart, inkproof-replacing-chart');
     el.addEventListener('inkproof-view', e => window.views.push(e.detail));
     el.addEventListener('inkproof-cursor', e => window.cursors.push(e.detail));
   });
-  await page.locator('inkproof-accessible-chart').focus();
+  await page.locator('inkproof-accessible-chart, inkproof-replacing-chart').focus();
   for (const key of keys) await page.keyboard.press(key);
 };
 const announced = page => page.evaluate(() => document.querySelector('inkproof-accessible-chart').shadowRoot.querySelector('[aria-live]').textContent);
@@ -396,12 +396,12 @@ test('the data is available as a table that can be shown', async () => {
 const gesture = async (page, steps) => {
   await page.evaluate(() => {
     window.views = []; window.pointers = [];
-    const el = document.querySelector('inkproof-accessible-chart');
+    const el = document.querySelector('inkproof-accessible-chart, inkproof-replacing-chart');
     el.addEventListener('inkproof-view', e => window.views.push(e.detail));
     el.addEventListener('inkproof-pointer', e => window.pointers.push(e.detail));
   });
   await page.evaluate(steps => {
-    const el = document.querySelector('inkproof-accessible-chart');
+    const el = document.querySelector('inkproof-accessible-chart, inkproof-replacing-chart');
     const rect = el.getBoundingClientRect();
     for (const [type, init] of steps) {
       const { x, y, ...rest } = init;
@@ -472,5 +472,22 @@ test('the data position under the pointer is reported, and nothing is while it i
   const pointers = await page.evaluate(() => window.pointers);
   assert.equal(pointers.length, 1);
   assert.ok(Math.abs(pointers[0].x - 25) < 1e-6 && Math.abs(pointers[0].y - 75) < 1e-6);
+  await context.close();
+});
+
+test('replacing the scene keeps the view, and a reset returns to home', async () => {
+  const { page, context, messages } = await open('/replacing.html');
+  await drawn(page, 1);
+  await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200 }]]);
+  const first = await lastView(page);
+  const n = await page.evaluate(() => window.draws.length);
+  await drawn(page, n + 1);
+  await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200 }]]);
+  const second = await lastView(page);
+  assert.ok(second.xEnd - second.xStart < first.xEnd - first.xStart, 'the next wheel step continues from the zoomed view');
+  await page.evaluate(() => document.querySelector('inkproof-replacing-chart').dispatchEvent(new Event('test-reset')));
+  assert.deepEqual(await lastView(page), { xStart: 0, xEnd: 100, yStart: 0, yEnd: 100 });
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  assert.deepEqual(messages.filter(m => m.type === 'error' || m.type === 'warning'), []);
   await context.close();
 });

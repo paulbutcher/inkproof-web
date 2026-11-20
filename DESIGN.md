@@ -16,7 +16,7 @@ Lasm's browser bindings (`Lasm.JS.Web`, `Lasm.UI`) ship with `@lasm/cli` and are
 ## Accessibility
 
 - A scene carries an `Access`: the chart's name, series, point count, optional summary, a data table and the view configuration. The element becomes focusable (`tabindex` 0 unless set), takes the name as `aria-label` and the summary as `aria-description`, and holds the data in a visually hidden table; the `show-table` attribute swaps the canvas for it.
-- Keys map to a `Command` (pure, native), and `Nav.apply` applies it: zoom and pan go through Viewport's `View.step`, so keys and pointer share one path. The host reports changes as `inkproof-view` and `inkproof-cursor` events and announces them in a polite live region; the application answers a view change with a new scene. Keys with modifiers, and keys the chart does not use, are left to the browser.
+- Keys map to a `Command` (pure, native), and `Nav.apply` applies it: zoom and pan go through Viewport's `View.step`, so keys and pointer share one path. The host reports changes as `inkproof-view` and `inkproof-cursor` events and announces them in a polite live region; the application answers a view change with `Host.setScene`, which replaces the scene but keeps the `Nav` (its cursor clamped to the new data) and the GPU state, and a page's own controls issue a `Command` with `Host.apply`. Keys with modifiers, and keys the chart does not use, are left to the browser.
 
 ## Building an application
 

@@ -65,6 +65,11 @@ theorem Inkproof.Web.Nav.apply_point_lt : ∀ (c : Inkproof.Web.NavConfig) (n : 
 theorem Inkproof.Web.Nav.apply_reset : ∀ (c : Inkproof.Web.NavConfig) (n : Inkproof.Web.Nav), Inkproof.Web.Nav.apply c n Inkproof.Web.Command.reset = Inkproof.Web.Nav.home c
 theorem Inkproof.Web.Nav.apply_series_lt : ∀ (c : Inkproof.Web.NavConfig) (n : Inkproof.Web.Nav), n.series < c.series → ∀ (cmd : Inkproof.Web.Command), (Inkproof.Web.Nav.apply c n cmd).series < c.series
 theorem Inkproof.Web.Nav.apply_view : ∀ (c : Inkproof.Web.NavConfig) (n : Inkproof.Web.Nav) (k : Inkproof.Viewport.Key), (Inkproof.Web.Nav.apply c n (Inkproof.Web.Command.view k)).view = Inkproof.Viewport.View.step c.view n.view (Inkproof.Viewport.Input.key k)
+def Inkproof.Web.Nav.clamp : Nat → Nat → Inkproof.Web.Nav → Inkproof.Web.Nav
+theorem Inkproof.Web.Nav.clamp_of_lt : ∀ (points series : Nat) (n : Inkproof.Web.Nav), n.point < points → n.series < series → Inkproof.Web.Nav.clamp points series n = n
+theorem Inkproof.Web.Nav.clamp_point_lt : ∀ (points series : Nat) (n : Inkproof.Web.Nav), 0 < points → (Inkproof.Web.Nav.clamp points series n).point < points
+theorem Inkproof.Web.Nav.clamp_series_lt : ∀ (points series : Nat) (n : Inkproof.Web.Nav), 0 < series → (Inkproof.Web.Nav.clamp points series n).series < series
+theorem Inkproof.Web.Nav.clamp_view : ∀ (points series : Nat) (n : Inkproof.Web.Nav), (Inkproof.Web.Nav.clamp points series n).view = n.view
 def Inkproof.Web.Nav.home : Inkproof.Web.NavConfig → Inkproof.Web.Nav
 theorem Inkproof.Web.Nav.home_cursor : ∀ (c : Inkproof.Web.NavConfig), (Inkproof.Web.Nav.home c).point = 0 ∧ (Inkproof.Web.Nav.home c).series = 0
 theorem Inkproof.Web.Nav.home_view : ∀ (c : Inkproof.Web.NavConfig), (Inkproof.Web.Nav.home c).view = Inkproof.Viewport.View.home c.view

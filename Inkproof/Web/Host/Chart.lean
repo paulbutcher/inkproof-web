@@ -316,14 +316,17 @@ private def rebuildTable (c : Chart) (access : Access) : IO Unit := do
   unless access.header.isEmpty do row access.header "th"
   for cells in access.rows do row cells "td"
 
-/-- Make the chart reachable by keyboard and assistive technology: focusable, named, described, with the data as a table. -/
-private def publish (c : Chart) (access : Access) : IO Unit := do
-  c.nav.set (access.view.map fun v => Nav.home ⟨v, access.points, access.series.size⟩)
+private def describe (c : Chart) (access : Access) : IO Unit := do
   if (← getAttr c.el "tabindex").isNone then c.el.callMethod "setAttribute" #[toJS "tabindex", toJS "0"] Unit
   c.el.callMethod "setAttribute" #[toJS "role", toJS "img"] Unit
   c.el.callMethod "setAttribute" #[toJS "aria-label", toJS access.name] Unit
   refreshSummary c access
   rebuildTable c access
+
+/-- Make the chart reachable by keyboard and assistive technology: focusable, named, described, with the data as a table. -/
+private def publish (c : Chart) (access : Access) : IO Unit := do
+  c.nav.set (access.view.map fun v => Nav.home ⟨v, access.points, access.series.size⟩)
+  describe c access
 
 /-- Make `next` the chart's state, telling the application and assistive technology of what changed from `nav`. -/
 private def commit (c : Chart) (scene : Scene) (nav next : Nav) : IO Unit := do
@@ -432,11 +435,33 @@ private def load (c : Chart) (loader : String → Async Scene) : Async Unit := d
     catch e =>
       fail c s!"loading the chart failed: {e}" [("src", attrs.src)]
 
-private def chartOf (args : Array Data) : IO (Option Chart) := do
-  let some (Data.ref el _) := args[0]? | return none
+private def chartOfElement (el : Value) : IO (Option Chart) := do
   match ← el.get idKey Data with
   | .number id => return (← live.get)[id.toUInt64.toNat]?
   | _ => return none
+
+/-- Replace the chart's scene, keeping its view, cursor and series (the cursor moved inside the new scene's data), and draw it; buffers already on the GPU are not uploaded again. A scene with no view configuration leaves the chart not navigable. -/
+def setScene (el : Value) (scene : Scene) : IO Unit := do
+  let some c ← chartOfElement el | return
+  unless (← c.alive.get) do return
+  let kept := (← c.nav.get).map (Nav.clamp scene.access.points scene.access.series.size)
+  c.scene.set (some scene)
+  c.nav.set (match scene.access.view, kept with
+    | some _, some nav => some nav
+    | some v, none => some (Nav.home ⟨v, scene.access.points, scene.access.series.size⟩)
+    | none, _ => none)
+  describe c scene.access
+  invalidate c
+
+/-- Apply `command` to the chart as the key for it would, telling the application of what changed. -/
+def apply (el : Value) (command : Command) : IO Unit := do
+  let some c ← chartOfElement el | return
+  let some (scene, navConfig, nav) ← navigable c | return
+  commit c scene nav (nav.apply navConfig command)
+
+private def chartOf (args : Array Data) : IO (Option Chart) := do
+  let some (Data.ref el _) := args[0]? | return none
+  chartOfElement el
 
 private def connect (loader : String → Async Scene) (args : Array Data) : Async Unit := do
   let some (Data.ref el _) := args[0]? | return
