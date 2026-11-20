@@ -3,6 +3,7 @@
 ## [0.9.0]
 
 - The `box-zoom` and `box-min` attributes choose which axes a shift-drag box zooms and the least drag that counts; `BoxConfig` is the pure choice, over Viewport's `Gesture.boxOver` (v0.7.0).
+- Requires Gpu v0.10.0 and regenerates `gpu-js` from it, so pixel-size strokes and markers draw.
 
 ## [0.8.0]
 

@@ -18,9 +18,9 @@ class Reader {
   done() { return this.p === this.v.byteLength; }
 }
 
-const VERTEX_SOURCE = "#version 300 es\n// Copyright (c) 2026 Paul Butcher. All rights reserved.\n// Released under Apache 2.0 license as described in the file LICENSE.\n// Generated from Inkproof.Gpu.Shader. Do not edit.\nprecision highp float;\nin vec2 a_position;\nuniform vec2 u_slope;\nuniform vec2 u_offset;\nvoid main() {\n  vec2 p = ((a_position * u_slope) + u_offset);\n  gl_Position = vec4(p.x, p.y, 0.0, 1.0);\n}\n";
+const VERTEX_SOURCE = "#version 300 es\n// Copyright (c) 2026 Paul Butcher. All rights reserved.\n// Released under Apache 2.0 license as described in the file LICENSE.\n// Generated from Inkproof.Gpu.Shader. Do not edit.\nprecision highp float;\nin vec2 a_position;\nin vec2 a_dir;\nin vec2 a_corner;\nuniform vec2 u_slope;\nuniform vec2 u_offset;\nuniform float u_size;\nuniform vec4 u_view;\nvoid main() {\n  vec2 p = ((a_position * u_slope) + u_offset);\n  vec2 d = ((a_dir * u_slope) * vec2(u_view.x, u_view.y));\n  float r = inversesqrt(((d.x * d.x) + (d.y * d.y)));\n  vec2 t = (d * r);\n  vec2 n = vec2((0.0 - t.y), t.x);\n  vec2 o = (((t * a_corner.x) + (n * a_corner.y)) * u_size);\n  gl_Position = vec4((p.x + (o.x * u_view.z)), (p.y + (o.y * u_view.w)), 0.0, 1.0);\n}\n";
 const FRAGMENT_SOURCE = "#version 300 es\n// Copyright (c) 2026 Paul Butcher. All rights reserved.\n// Released under Apache 2.0 license as described in the file LICENSE.\n// Generated from Inkproof.Gpu.Shader. Do not edit.\nprecision highp float;\nuniform vec4 u_colour;\nout vec4 o_colour;\nvoid main() {\n  o_colour = u_colour;\n}\n";
-const UNIFORM_NAMES = ["u_slope", "u_offset", "u_colour"];
+const UNIFORM_NAMES = ["u_slope", "u_offset", "u_size", "u_view", "u_colour"];
 
 function compile(gl, type, source) {
   const shader = gl.createShader(type);
@@ -35,6 +35,8 @@ function buildProgram(gl) {
   const shaders = [compile(gl, gl.VERTEX_SHADER, VERTEX_SOURCE), compile(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE)];
   for (const shader of shaders) gl.attachShader(program, shader);
   gl.bindAttribLocation(program, 0, "a_position");
+  gl.bindAttribLocation(program, 1, "a_dir");
+  gl.bindAttribLocation(program, 2, "a_corner");
   gl.linkProgram(program);
   const linked = gl.getProgramParameter(program, gl.LINK_STATUS);
   for (const shader of shaders) gl.deleteShader(shader);
@@ -53,7 +55,7 @@ function decodeCommand(r) {
     case 2: return { op: 2, name: "deleteBuffer", args: [r.u32()] };
     case 3: return { op: 3, name: "useProgram", args: [r.u32()] };
     case 4: return { op: 4, name: "uniform", args: [r.u32(), r.words()] };
-    case 5: return { op: 5, name: "draw", args: [r.u32(), r.u32()] };
+    case 5: return { op: 5, name: "draw", args: [r.u32(), r.u32(), r.u32()] };
     case 6: return { op: 6, name: "clear", args: [r.u32()] };
     case 7: return { op: 7, name: "createProgram", args: [r.u32()] };
     case 8: return { op: 8, name: "scissor", args: [r.words()] };
@@ -112,8 +114,13 @@ export function run(gl, s, bytes) {
     }
     case 5: {
       gl.bindBuffer(gl.ARRAY_BUFFER, s.buffers.get(a[0]));
-      gl.enableVertexAttribArray(0);
-      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      const n = a[2] / 2;
+      for (let i = 0; i < n; i++) {
+        gl.enableVertexAttribArray(i);
+        gl.vertexAttribPointer(i, 2, gl.FLOAT, false, 4 * a[2], 8 * i);
+      }
+      if (n <= 1) { gl.disableVertexAttribArray(1); gl.vertexAttrib2f(1, 1, 0); }
+      if (n <= 2) { gl.disableVertexAttribArray(2); gl.vertexAttrib2f(2, 0, 0); }
       gl.drawArrays(gl.TRIANGLES, 0, a[1]);
       break;
     }
