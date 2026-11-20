@@ -17,6 +17,7 @@ import Inkproof.Web.Box
 import Inkproof.Web.Cursor
 import Inkproof.Web.Group
 import Inkproof.Web.Select
+import Inkproof.Web.Events
 import Inkproof.Web.Host.Console
 import Inkproof.Web.Host.Gpu
 import Inkproof.Web.Host.Element
@@ -630,6 +631,41 @@ def apply (el : Value) (command : Command) : IO Unit := do
   let some (scene, navConfig, nav) ← navigable c | return
   commit c scene nav (nav.apply navConfig command)
 
+/-- The view an `inkproof-view` event reports, from its `detail`. -/
+def viewOf (detail : Value) : IO (View Float) :=
+  return View.ofBounds (← detail.get "xStart" Float) (← detail.get "xEnd" Float) (← detail.get "yStart" Float) (← detail.get "yEnd" Float)
+
+/-- The data position an `inkproof-pointer` event reports, from its `detail`. -/
+def pointerOf (detail : Value) : IO (Float × Float) :=
+  return (← detail.get "x" Float, ← detail.get "y" Float)
+
+initialize buttonsHandled : IO.Ref Bool ← IO.mkRef false
+
+/-- The element a button's attribute `name` gives the id of, with the button, if the click reached one. -/
+private def buttonTarget (event : Value) (name : String) : IO (Option (Value × Value)) := do
+  let hit ← (← event.get "target" Value).callMethod "closest" #[toJS s!"button[{name}]"] Data
+  let .ref button _ := hit | return none
+  let id ← button.callMethod "getAttribute" #[toJS name] String
+  let found ← (← (← global).get "document").callMethod "getElementById" #[toJS id] Data
+  let .ref el _ := found | do
+    log .warn "a button names no chart" [("attribute", name), ("id", id)]
+    return none
+  return some (button, el)
+
+/-- Answer clicks on `button[data-reset]`, which resets the chart whose id it holds, and on `button[data-unlink]`, which takes that chart out of its group, or puts it back in the one the button's `data-group` names. -/
+private def handleButtons : IO Unit := do
+  if ← buttonsHandled.get then return
+  buttonsHandled.set true
+  let click ← Function.ofSyncFn fun args => do
+    let some (Data.ref event _) := args[0]? | return .undefined
+    if let some (_, el) ← buttonTarget event "data-reset" then apply el .reset
+    if let some (button, el) ← buttonTarget event "data-unlink" then
+      match Group.toggled (← getAttr el "group") (← getAttr button "data-group") with
+      | some name => el.callMethod "setAttribute" #[toJS "group", toJS name] Unit
+      | none => el.callMethod "removeAttribute" #[toJS "group"] Unit
+    return .undefined
+  (← (← global).get "document").callMethod "addEventListener" #[toJS "click", toJS click] Unit
+
 private def chartOf (args : Array Data) : IO (Option Chart) := do
   let some (Data.ref el _) := args[0]? | return none
   chartOfElement el
@@ -710,8 +746,9 @@ private def changed (loader : String → Async Scene) (args : Array Data) : Asyn
       | some (.string "select") => reselect c (← getAttr c.el "select")
       | _ => load c loader
 
-/-- Define the custom element `tag`: it draws the scene `loader` makes of its `src` attribute. -/
-def register (tag : String) (loader : String → Async Scene := fetchScene) : IO Unit := do
+/-- Define the custom element `tag`: it draws the scene `loader` makes of its `src` attribute. With `buttons`, the page's `button[data-reset]` and `button[data-unlink]` act on the charts they name, with no page code. -/
+def register (tag : String) (loader : String → Async Scene := fetchScene) (buttons : Bool := false) : IO Unit := do
+  if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
   defineElement tag #["src", "log-level", "group", "cursor", "select"]

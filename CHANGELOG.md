@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.13.0]
+
+- `SceneState` and `SceneCache` keep a chart's GPU cache across frames, discard it when the context is lost, number buffers per chart, and let a page invalidate it when its data changes.
+- The `buttons` option of `Host.register` wires `data-reset` and `data-unlink` buttons with no page script; `Host.viewOf` and `Host.pointerOf` decode the `inkproof-view` and `inkproof-pointer` details.
+
 ## [0.12.0]
 
 - The `cursor` attribute draws lines at the data position under the pointer, shown on the other charts of the group too; `CursorMode` and `Cursor.lines` are the pure parts.

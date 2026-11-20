@@ -81,7 +81,7 @@ private def redrawOnRequest (el : Value) (cache : SceneCache) : IO Unit := do
 def main : IO Unit := do
   let cache ← SceneCache.new
   register "inkproof-cached-chart" fun _ => do cachedScene cache
-  register "inkproof-accessible-chart" accessibleScene
+  register "inkproof-accessible-chart" accessibleScene (buttons := true)
   let base ← IO.mkRef none
   register "inkproof-replacing-chart" fun src => do
     let scene ← accessibleScene src
@@ -94,5 +94,17 @@ def main : IO Unit := do
   let doc ← (← global).get "document"
   if let .ref el _ ← doc.callMethod "querySelector" #[toJS "inkproof-replacing-chart"] Data then
     answerViews el base
+  let mirror (event : String) (id : String) (text : Value → IO String) : IO Unit := do
+    if let .ref out _ ← doc.callMethod "getElementById" #[toJS id] Data then
+      let listener ← Function.ofSyncFn fun args => do
+        if let some (Data.ref e _) := args[0]? then out.set "textContent" (← text (← e.get "detail" Value))
+        return .undefined
+      doc.callMethod "addEventListener" #[toJS event, toJS listener] Unit
+  mirror "inkproof-view" "view" fun d => do
+    let v ← viewOf d
+    return s!"{v.x.start} {v.x.span} {v.y.start} {v.y.span}"
+  mirror "inkproof-pointer" "reading" fun d => do
+    let (x, y) ← pointerOf d
+    return s!"{x} {y}"
   if let .ref el _ ← doc.callMethod "querySelector" #[toJS "inkproof-cached-chart"] Data then
     redrawOnRequest el cache

@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>buttons</title>
+    <style>inkproof-accessible-chart { width: 400px; height: 200px; }</style>
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <inkproof-accessible-chart id="a" src="chart.bin" group="g"></inkproof-accessible-chart>
+    <inkproof-accessible-chart id="b" src="chart.bin" group="g"></inkproof-accessible-chart>
+    <button id="reset" data-reset="a">Reset</button>
+    <button id="unlink" data-unlink="b" data-group="g">Unlink</button>
+    <p id="view"></p>
+    <p id="reading"></p>
+  </body>
+</html>

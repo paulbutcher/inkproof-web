@@ -13,6 +13,7 @@ import Inkproof.Web.Box
 import Inkproof.Web.Cursor
 import Inkproof.Web.Group
 import Inkproof.Web.Select
+import Inkproof.Web.Events
 import Inkproof.Web.SceneState
 
 /-! # Inkproof.Web -/

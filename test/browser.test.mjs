@@ -630,6 +630,47 @@ test('a drag on a selecting chart draws a band that the others in its group show
   await context.close();
 });
 
+test('buttons reset and unlink charts with no page script, and the page decodes the events', async () => {
+  const { page, context } = await open('/buttons.html');
+  await drawn(page, 2);
+  const seen = () => page.evaluate(() => {
+    window.last = {};
+    for (const id of ['a', 'b']) document.getElementById(id).addEventListener('inkproof-view', e => { window.last[id] = e.detail; window.latest = e.detail; });
+  });
+  const wheel = () => page.evaluate(() => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: rect.left + 100, clientY: rect.top + 100, deltaY: -200 }));
+  });
+  await seen();
+  await wheel();
+  const zoomed = await page.evaluate(() => window.last.a);
+  assert.ok(zoomed.xEnd - zoomed.xStart < 100);
+  const decoded = (await page.locator('#view').textContent()).split(' ').map(Number);
+  const latest = await page.evaluate(() => window.latest);
+  const expected = [latest.xStart, latest.xEnd - latest.xStart, latest.yStart, latest.yEnd - latest.yStart];
+  decoded.forEach((n, i) => assert.ok(Math.abs(n - expected[i]) < 1e-5, `${decoded} vs ${expected}`));
+  await page.click('#reset');
+  const home = await page.evaluate(() => window.last.a);
+  assert.deepEqual([home.xStart, home.xEnd], [0, 100]);
+  await page.click('#unlink');
+  assert.equal(await page.evaluate(() => document.getElementById('b').hasAttribute('group')), false);
+  await seen();
+  await wheel();
+  assert.equal(await page.evaluate(() => window.last.b), undefined, 'an unlinked chart does not follow');
+  await page.click('#unlink');
+  assert.equal(await page.evaluate(() => document.getElementById('b').getAttribute('group')), 'g');
+  await page.evaluate(() => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: rect.left + 100, clientY: rect.top + 100 }));
+  });
+  const [x, y] = (await page.locator('#reading').textContent()).split(' ').map(Number);
+  assert.ok(Number.isFinite(x) && Number.isFinite(y));
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
 test('a chart that builds from its scene cache uploads once, again after the data changes or a context is lost', async () => {
   const { page, context } = await open('/cached.html');
   await drawn(page, 1);

@@ -89,6 +89,9 @@ def Inkproof.Web.Group.parse : Option String → Except String (Option String)
 theorem Inkproof.Web.Group.parse_empty : ∃ e, Inkproof.Web.Group.parse (Option.some "") = Except.error e
 theorem Inkproof.Web.Group.parse_name : ∀ (name : String), name ≠ "" → Inkproof.Web.Group.parse (Option.some name) = Except.ok (Option.some name)
 theorem Inkproof.Web.Group.parse_none : Inkproof.Web.Group.parse Option.none = Except.ok Option.none
+def Inkproof.Web.Group.toggled : Option String → Option String → Option String
+theorem Inkproof.Web.Group.toggled_linked : ∀ (name : String) (named : Option String), Inkproof.Web.Group.toggled (Option.some name) named = Option.none
+theorem Inkproof.Web.Group.toggled_unlinked : ∀ (named : Option String), Inkproof.Web.Group.toggled Option.none named = named
 inductive Inkproof.Web.Level : Type
 constructor Inkproof.Web.Level.debug : Inkproof.Web.Level
 def Inkproof.Web.Level.defaultThreshold : Inkproof.Web.Level
@@ -198,6 +201,9 @@ def Inkproof.Web.TextCache.measurer : Inkproof.Web.TextCache → String → Stri
 theorem Inkproof.Web.TextCache.measurer_insert : ∀ (c : Inkproof.Web.TextCache) (font text : String) (size : Float × Float), (c.insert font text size).measurer font text = size
 constructor Inkproof.Web.TextCache.mk : Std.HashMap (String × String) (Float × Float) → Inkproof.Web.TextCache
 field Inkproof.Web.TextCache.sizes : Inkproof.Web.TextCache → Std.HashMap (String × String) (Float × Float)
+def Inkproof.Web.View.ofBounds : Float → Float → Float → Float → Inkproof.Viewport.View Float
+theorem Inkproof.Web.View.ofBounds_x : ∀ (xStart xEnd yStart yEnd : Float), (Inkproof.Web.View.ofBounds xStart xEnd yStart yEnd).x = { start := xStart, span := xEnd - xStart }
+theorem Inkproof.Web.View.ofBounds_y : ∀ (xStart xEnd yStart yEnd : Float), (Inkproof.Web.View.ofBounds xStart xEnd yStart yEnd).y = { start := yStart, span := yEnd - yStart }
 def Inkproof.Web.backingPx : Nat → Inkproof.Web.Milli → Nat
 theorem Inkproof.Web.backingPx_close : ∀ {css : Nat} (ratio : Inkproof.Web.Milli), 1000 ≤ css * ratio + 500 → css ≠ 0 → Inkproof.Web.backingPx css ratio * 1000 ≤ css * ratio + 500 ∧ css * ratio < Inkproof.Web.backingPx css ratio * 1000 + 500
 theorem Inkproof.Web.backingPx_pos : ∀ {css : Nat}, 0 < css → ∀ (ratio : Inkproof.Web.Milli), 0 < Inkproof.Web.backingPx css ratio
