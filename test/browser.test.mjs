@@ -32,6 +32,9 @@ const instrument = () => {
   window.setTimeout = function (fn, ms, ...rest) { if (ms === 0 && fn.name !== 'tick') window.zeroTimeouts++; return set.call(this, fn, ms, ...rest); };
   const measureText = CanvasRenderingContext2D.prototype.measureText;
   CanvasRenderingContext2D.prototype.measureText = function (...args) { window.measurements++; return measureText.apply(this, args); };
+  window.uploads = 0;
+  const bufferData = WebGL2RenderingContext.prototype.bufferData;
+  WebGL2RenderingContext.prototype.bufferData = function (...args) { window.uploads++; return bufferData.apply(this, args); };
   const getContext = HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext = function (kind, ...rest) {
     const context = getContext.call(this, kind, ...rest);
@@ -623,6 +626,28 @@ test('a drag on a selecting chart draws a band that the others in its group show
   const shown = (await page.evaluate(() => window.followed)).at(-1);
   assert.deepEqual([zoomed.xStart, zoomed.xEnd], [shown.xStart, shown.xEnd], 'zooming the other chart moves the band');
   assert.deepEqual(await page.evaluate(() => window.own), [], 'the selecting chart still keeps its range');
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
+test('a chart that builds from its scene cache uploads once, again after the data changes or a context is lost', async () => {
+  const { page, context } = await open('/cached.html');
+  await drawn(page, 1);
+  assert.equal(await page.evaluate(() => window.uploads), 1);
+  const redraw = async (event, n) => {
+    await page.evaluate(event => document.querySelector('inkproof-cached-chart').dispatchEvent(new Event(event)), event);
+    await drawn(page, n);
+  };
+  await redraw('test-redraw', 2);
+  assert.equal(await page.evaluate(() => window.uploads), 1, 'a second draw reuses the buffer');
+  await page.evaluate(() => { window.lose = window.contexts[0].getExtension('WEBGL_lose_context'); window.lose.loseContext(); });
+  await page.waitForFunction(() => window.contexts[0].isContextLost());
+  await page.evaluate(() => window.lose.restoreContext());
+  await redraw('test-redraw', 3);
+  assert.equal(await page.evaluate(() => window.uploads), 2, 'a draw after a lost context uploads again');
+  await page.evaluate(() => document.querySelector('inkproof-cached-chart').dispatchEvent(new Event('test-invalidate')));
+  await redraw('test-redraw', 4);
+  assert.equal(await page.evaluate(() => window.uploads), 3, 'an invalidated cache uploads again');
   assert.deepEqual(await page.evaluate(() => window.errors), []);
   await context.close();
 });

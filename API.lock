@@ -140,6 +140,21 @@ constructor Inkproof.Web.NavConfig.mk : Inkproof.Viewport.ViewConfig Float → N
 field Inkproof.Web.NavConfig.points : Inkproof.Web.NavConfig → Nat
 field Inkproof.Web.NavConfig.series : Inkproof.Web.NavConfig → Nat
 field Inkproof.Web.NavConfig.view : Inkproof.Web.NavConfig → Inkproof.Viewport.ViewConfig Float
+structure Inkproof.Web.SceneState : Type
+field Inkproof.Web.SceneState.cache : Inkproof.Web.SceneState → Inkproof.Gpu.Cache
+def Inkproof.Web.SceneState.current : Nat → Nat → Option Inkproof.Web.SceneState → Inkproof.Web.SceneState
+theorem Inkproof.Web.SceneState.current_generation : ∀ (base generation : Nat) (s : Option Inkproof.Web.SceneState), (Inkproof.Web.SceneState.current base generation s).generation = generation
+theorem Inkproof.Web.SceneState.current_none : ∀ (base generation : Nat), Inkproof.Web.SceneState.current base generation Option.none = Inkproof.Web.SceneState.fresh base generation
+theorem Inkproof.Web.SceneState.current_same : ∀ (base : Nat) (s : Inkproof.Web.SceneState), Inkproof.Web.SceneState.current base s.generation (Option.some s) = s
+theorem Inkproof.Web.SceneState.current_stale : ∀ (base generation : Nat) (s : Inkproof.Web.SceneState), s.generation ≠ generation → Inkproof.Web.SceneState.current base generation (Option.some s) = Inkproof.Web.SceneState.fresh base generation
+field Inkproof.Web.SceneState.drawn : Inkproof.Web.SceneState → Bool
+def Inkproof.Web.SceneState.drew : Inkproof.Web.SceneState → Inkproof.Gpu.Cache → Inkproof.Web.SceneState
+theorem Inkproof.Web.SceneState.drew_cache : ∀ (s : Inkproof.Web.SceneState) (cache : Inkproof.Gpu.Cache), (s.drew cache).cache = cache ∧ (s.drew cache).drawn = Bool.true
+theorem Inkproof.Web.SceneState.drew_generation : ∀ (s : Inkproof.Web.SceneState) (cache : Inkproof.Gpu.Cache), (s.drew cache).generation = s.generation
+def Inkproof.Web.SceneState.fresh : Nat → Nat → Inkproof.Web.SceneState
+theorem Inkproof.Web.SceneState.fresh_undrawn : ∀ (base generation : Nat), (Inkproof.Web.SceneState.fresh base generation).drawn = Bool.false ∧ (Inkproof.Web.SceneState.fresh base generation).cache.entries = [] ∧ (Inkproof.Web.SceneState.fresh base generation).cache.next = base
+field Inkproof.Web.SceneState.generation : Inkproof.Web.SceneState → Nat
+constructor Inkproof.Web.SceneState.mk : Inkproof.Gpu.Cache → Nat → Bool → Inkproof.Web.SceneState
 def Inkproof.Web.Select.config : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.Selection.Config Float
 theorem Inkproof.Web.Select.config_domain : ∀ (c : Inkproof.Viewport.ViewConfig Float), (Inkproof.Web.Select.config c).domain = (Inkproof.Viewport.View.home c).x
 theorem Inkproof.Web.Select.config_minWidth : ∀ (c : Inkproof.Viewport.ViewConfig Float), (Inkproof.Web.Select.config c).minWidth = Inkproof.Web.Select.minPixels * ((Inkproof.Viewport.View.home c).x.span / c.x.length)

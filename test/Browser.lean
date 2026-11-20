@@ -6,9 +6,11 @@ import Inkproof.Axis.LabelLayout
 import Inkproof.Web.Host.Axis
 import Inkproof.Web.Host.Chart
 import Inkproof.Web.Host.Measure
+import Inkproof.Web.Host.SceneCache
+import Inkproof.Gpu.Compile
 import Inkproof.Viewport.View
 
-open Lasm.JS Inkproof.Web Inkproof.Web.Host
+open Lasm.JS Inkproof.Gpu Inkproof.Web Inkproof.Web.Host
 
 /-- The command list from `src`, with Axis-laid-out labels over it, measured by the browser. -/
 def labelledScene (src : String) : Async Scene := do
@@ -54,7 +56,31 @@ private def answerViews (el : Value) (base : IO.Ref (Option Scene)) : IO Unit :=
   let onReset ← Function.ofSyncFn fun _ => do apply el .reset; return .undefined
   el.callMethod "addEventListener" #[toJS "test-reset", toJS onReset] Unit
 
+/-- A scene that draws one buffer, uploaded only when the cache does not hold it. -/
+def cachedScene (cache : SceneCache) : IO Scene :=
+  cache.build fun c fresh => do
+    let one : UInt32 := 0x3f800000
+    let words : List UInt32 := [one, one, 0, one, one, 0]
+    let (c', handle, setup) : Cache × Nat × List Cmd := match c.entries.find? (·.words == [words]) with
+      | some e => (c, e.base, [])
+      | none => ({ entries := ⟨[words], c.next⟩ :: c.entries, next := c.next + 1 }, c.next,
+          [⟨0, [.u32 c.next.toUInt32]⟩, ⟨1, [.u32 c.next.toUInt32, .words words]⟩])
+    let prologue : List Cmd := if fresh then [⟨8, [.words []]⟩, ⟨6, [.u32 0xff8000ff]⟩, ⟨7, [.u32 0]⟩] else []
+    let draw : List Cmd := [⟨3, [.u32 0]⟩, ⟨4, [.u32 0, .words [one, one]]⟩, ⟨4, [.u32 1, .words [0, 0]]⟩,
+      ⟨4, [.u32 2, .words [0]]⟩, ⟨4, [.u32 3, .words [one, one, one, one]]⟩, ⟨4, [.u32 4, .words [0, 0, one, one]]⟩,
+      ⟨5, [.u32 handle.toUInt32, .u32 3, .u32 2]⟩]
+    return (c', { commands := ByteArray.mk (encode (prologue ++ setup ++ draw)).toArray })
+
+/-- Draw the chart again from its cache on each `test-redraw` event, and from an emptied one after `test-invalidate`. -/
+private def redrawOnRequest (el : Value) (cache : SceneCache) : IO Unit := do
+  let redraw ← Function.ofSyncFn fun _ => do setScene el (← cachedScene cache); return .undefined
+  el.callMethod "addEventListener" #[toJS "test-redraw", toJS redraw] Unit
+  let invalidate ← Function.ofSyncFn fun _ => do cache.invalidate; return .undefined
+  el.callMethod "addEventListener" #[toJS "test-invalidate", toJS invalidate] Unit
+
 def main : IO Unit := do
+  let cache ← SceneCache.new
+  register "inkproof-cached-chart" fun _ => do cachedScene cache
   register "inkproof-accessible-chart" accessibleScene
   let base ← IO.mkRef none
   register "inkproof-replacing-chart" fun src => do
@@ -68,3 +94,5 @@ def main : IO Unit := do
   let doc ← (← global).get "document"
   if let .ref el _ ← doc.callMethod "querySelector" #[toJS "inkproof-replacing-chart"] Data then
     answerViews el base
+  if let .ref el _ ← doc.callMethod "querySelector" #[toJS "inkproof-cached-chart"] Data then
+    redrawOnRequest el cache
