@@ -785,6 +785,11 @@ private def connect (loader : String → Async Scene) (args : Array Data) : Asyn
     if let some (Data.ref event _) := args[0]? then onLegendClick c event
     return .undefined
   c.legendEl.callMethod "addEventListener" #[toJS "click", toJS legendClick] Unit
+  -- Gestures on the chart capture the pointer, which would retarget the click away from the entry.
+  let keepPress ← Function.ofSyncFn fun args => do
+    if let some (Data.ref event _) := args[0]? then event.callMethod "stopPropagation" #[] Unit
+    return .undefined
+  c.legendEl.callMethod "addEventListener" #[toJS "pointerdown", toJS keepPress] Unit
   c.frameCallback.set (some (← Function.ofSyncFn fun _ => do onFrame c; return .undefined))
   let observe ← Function.ofSyncFn fun _ => do
     if (← c.alive.get) then sync c

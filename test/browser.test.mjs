@@ -714,7 +714,7 @@ test('the tooltip names the nearest visible point and the legend gives each seri
   assert.equal(await text('.tip'), 'North: 25, 30');
   await move(40);
   assert.equal(await text('.tip'), 'South: 25, 70', 'the nearest point changes with the pointer');
-  await page.evaluate(() => document.getElementById('a').shadowRoot.querySelector('.legend button').click());
+  await page.locator('#a .legend button').first().click();
   assert.deepEqual(await page.evaluate(() => window.toggled), [{ series: 0, hidden: true }]);
   await move(130);
   assert.equal(await text('.tip'), 'South: 25, 70', 'a hidden series has no nearest point');
