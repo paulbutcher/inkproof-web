@@ -140,6 +140,28 @@ constructor Inkproof.Web.NavConfig.mk : Inkproof.Viewport.ViewConfig Float → N
 field Inkproof.Web.NavConfig.points : Inkproof.Web.NavConfig → Nat
 field Inkproof.Web.NavConfig.series : Inkproof.Web.NavConfig → Nat
 field Inkproof.Web.NavConfig.view : Inkproof.Web.NavConfig → Inkproof.Viewport.ViewConfig Float
+def Inkproof.Web.Select.config : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.Selection.Config Float
+theorem Inkproof.Web.Select.config_domain : ∀ (c : Inkproof.Viewport.ViewConfig Float), (Inkproof.Web.Select.config c).domain = (Inkproof.Viewport.View.home c).x
+theorem Inkproof.Web.Select.config_minWidth : ∀ (c : Inkproof.Viewport.ViewConfig Float), (Inkproof.Web.Select.config c).minWidth = Inkproof.Web.Select.minPixels * ((Inkproof.Viewport.View.home c).x.span / c.x.length)
+theorem Inkproof.Web.Select.config_tolerance : ∀ (c : Inkproof.Viewport.ViewConfig Float), (Inkproof.Web.Select.config c).tolerance = Inkproof.Web.Select.grabPixels * ((Inkproof.Viewport.View.home c).x.span / c.x.length)
+def Inkproof.Web.Select.extent : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Inkproof.Viewport.Selection.Band Float → Float × Float
+theorem Inkproof.Web.Select.extent_eq : ∀ (c : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (band : Inkproof.Viewport.Selection.Band Float), Inkproof.Web.Select.extent c view band = (Inkproof.Viewport.Interval.toScreen c.x view.x band.lo, Inkproof.Viewport.Interval.toScreen c.x view.x band.hi)
+def Inkproof.Web.Select.following : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Option (Inkproof.Viewport.Selection.Band Float)
+theorem Inkproof.Web.Select.following_eq : ∀ (c : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float), Inkproof.Web.Select.following c view = Inkproof.Viewport.Selection.draw (Inkproof.Web.Select.config c) view.x.start (view.x.start + view.x.span)
+def Inkproof.Web.Select.grabPixels : Float
+def Inkproof.Web.Select.minPixels : Float
+def Inkproof.Web.Select.shown : Inkproof.Viewport.View Float → Inkproof.Viewport.Selection.Band Float → Inkproof.Viewport.View Float
+theorem Inkproof.Web.Select.shown_x : ∀ (view : Inkproof.Viewport.View Float) (band : Inkproof.Viewport.Selection.Band Float), (Inkproof.Web.Select.shown view band).x = band.toInterval
+theorem Inkproof.Web.Select.shown_y : ∀ (view : Inkproof.Viewport.View Float) (band : Inkproof.Viewport.Selection.Band Float), (Inkproof.Web.Select.shown view band).y = view.y
+inductive Inkproof.Web.SelectMode : Type
+def Inkproof.Web.SelectMode.ofNat : Nat → Inkproof.Web.SelectMode
+theorem Inkproof.Web.SelectMode.ofNat_ctorIdx : ∀ (x : Inkproof.Web.SelectMode), Inkproof.Web.SelectMode.ofNat x.ctorIdx = x
+constructor Inkproof.Web.SelectMode.off : Inkproof.Web.SelectMode
+def Inkproof.Web.SelectMode.parse : Option String → Except String Inkproof.Web.SelectMode
+theorem Inkproof.Web.SelectMode.parse_invalid : ∀ (s : String), s ≠ "off" ∧ s ≠ "x" → ∃ e, Inkproof.Web.SelectMode.parse (Option.some s) = Except.error e
+theorem Inkproof.Web.SelectMode.parse_none : Inkproof.Web.SelectMode.parse Option.none = Except.ok Inkproof.Web.SelectMode.off
+theorem Inkproof.Web.SelectMode.parse_x : Inkproof.Web.SelectMode.parse (Option.some "x") = Except.ok Inkproof.Web.SelectMode.x
+constructor Inkproof.Web.SelectMode.x : Inkproof.Web.SelectMode
 structure Inkproof.Web.Size : Type
 def Inkproof.Web.Size.backing : Nat → Nat → Inkproof.Web.Milli → Inkproof.Web.Size
 theorem Inkproof.Web.Size.backing_height : ∀ (w h : Nat) (ratio : Inkproof.Web.Milli), (Inkproof.Web.Size.backing w h ratio).height = Inkproof.Web.backingPx h ratio
@@ -181,6 +203,7 @@ instance Inkproof.Web.instDecidableEqDragMode : DecidableEq Inkproof.Web.DragMod
 instance Inkproof.Web.instDecidableEqFrame : DecidableEq Inkproof.Web.Frame
 def Inkproof.Web.instDecidableEqFrame.decEq : (x x_1 : Inkproof.Web.Frame) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqLevel : DecidableEq Inkproof.Web.Level
+instance Inkproof.Web.instDecidableEqSelectMode : DecidableEq Inkproof.Web.SelectMode
 instance Inkproof.Web.instDecidableEqSize : DecidableEq Inkproof.Web.Size
 def Inkproof.Web.instDecidableEqSize.decEq : (x x_1 : Inkproof.Web.Size) → Decidable (x = x_1)
 instance Inkproof.Web.instInhabitedLevel : Inhabited Inkproof.Web.Level

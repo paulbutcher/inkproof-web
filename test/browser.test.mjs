@@ -587,3 +587,42 @@ test('a cursor follows the pointer and shows on the other charts of its group', 
   assert.deepEqual(await page.evaluate(() => window.errors), []);
   await context.close();
 });
+
+test('a drag on a selecting chart draws a band that the others in its group show, and its own range stays', async () => {
+  const { page, context } = await open('/select.html');
+  await drawn(page, 2);
+  await page.evaluate(() => {
+    window.selected = []; window.followed = []; window.own = [];
+    document.getElementById('a').addEventListener('inkproof-select', e => window.selected.push(e.detail));
+    document.getElementById('a').addEventListener('inkproof-view', e => window.own.push(e.detail));
+    document.getElementById('b').addEventListener('inkproof-view', e => window.followed.push(e.detail));
+  });
+  const point = (type, x) => page.evaluate(([type, x]) => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent(type, { pointerId: 1, clientX: rect.left + x, clientY: rect.top + 100 }));
+  }, [type, x]);
+  await point('pointerdown', 150);
+  await point('pointermove', 250);
+  await point('pointerup', 250);
+  await settle(page);
+  const [band] = (await page.evaluate(() => window.selected)).slice(-1);
+  assert.ok(band.xStart < band.xEnd, 'the drag reports an ordered range');
+  const [view] = (await page.evaluate(() => window.followed)).slice(-1);
+  assert.deepEqual([view.xStart, view.xEnd], [band.xStart, band.xEnd], 'the other chart takes the selected range');
+  assert.deepEqual(await page.evaluate(() => window.own), [], 'the selecting chart keeps its range');
+  await point('pointerdown', 200);
+  await point('pointermove', 240);
+  await point('pointerup', 240);
+  const moved = (await page.evaluate(() => window.selected)).at(-1);
+  assert.ok(Math.abs(moved.xStart - band.xStart - 10) < 1e-6 && Math.abs(moved.xEnd - band.xEnd - 10) < 1e-6, 'a drag inside the band moves it');
+  await page.locator('#b').focus();
+  await page.keyboard.press('+');
+  await settle(page);
+  const zoomed = (await page.evaluate(() => window.selected)).at(-1);
+  const shown = (await page.evaluate(() => window.followed)).at(-1);
+  assert.deepEqual([zoomed.xStart, zoomed.xEnd], [shown.xStart, shown.xEnd], 'zooming the other chart moves the band');
+  assert.deepEqual(await page.evaluate(() => window.own), [], 'the selecting chart still keeps its range');
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});

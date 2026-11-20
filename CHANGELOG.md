@@ -3,6 +3,7 @@
 ## [0.12.0]
 
 - The `cursor` attribute draws lines at the data position under the pointer, shown on the other charts of the group too; `CursorMode` and `Cursor.lines` are the pure parts.
+- The `select` attribute makes a drag on a chart draw, move or resize a band over its x range, reported as `inkproof-select` and set with `Host.setSelection`; the group's other charts show the band as their x range; `SelectMode` and `Select` are the pure parts, on Viewport v0.10.0's `Selection`.
 
 ## [0.11.0]
 

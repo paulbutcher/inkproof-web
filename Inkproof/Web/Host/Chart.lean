@@ -16,6 +16,7 @@ import Inkproof.Web.Pointer
 import Inkproof.Web.Box
 import Inkproof.Web.Cursor
 import Inkproof.Web.Group
+import Inkproof.Web.Select
 import Inkproof.Web.Host.Console
 import Inkproof.Web.Host.Gpu
 import Inkproof.Web.Host.Element
@@ -116,6 +117,10 @@ private structure Chart where
   group : IO.Ref (Option String)
   dragMode : IO.Ref DragMode
   cursorMode : IO.Ref CursorMode
+  selectMode : IO.Ref SelectMode
+  /-- The selected x range, in data coordinates. -/
+  band : IO.Ref (Option (Selection.Band Float))
+  selectDrag : IO.Ref (Option (Selection.Drag Float))
   /-- The data position of the cursor, with the y position when the pointer is over this chart. -/
   cursor : IO.Ref (Option (Float × Option Float))
   frame : IO.Ref Frame
@@ -220,6 +225,15 @@ private def draw (c : Chart) : IO Unit := do
     c.ctx.callMethod "rotate" #[toJS label.rotation] Unit
     c.ctx.callMethod "fillText" #[toJS label.text, toJS 0, toJS 0] Unit
     c.ctx.callMethod "restore" #[] Unit
+  if let (some band, some config) := (← c.band.get, scene.access.view) then
+    let view := ((← c.nav.get).map (·.view)).getD (View.home config)
+    let (left, right) := Select.extent config view band
+    let origin := scene.access.plotOrigin
+    c.ctx.set "fillStyle" "rgba(0, 100, 255, 0.2)"
+    c.ctx.callMethod "fillRect" #[toJS (origin.1 + left), toJS origin.2, toJS (right - left), toJS config.y.length] Unit
+    c.ctx.set "strokeStyle" "rgba(0, 100, 255, 0.8)"
+    c.ctx.set "lineWidth" 1
+    c.ctx.callMethod "strokeRect" #[toJS (origin.1 + left), toJS origin.2, toJS (right - left), toJS config.y.length] Unit
   if let (some (x, y), some config) := (← c.cursor.get, scene.access.view) then
     let view := ((← c.nav.get).map (·.view)).getD (View.home config)
     c.ctx.set "strokeStyle" "rgba(0, 0, 0, 0.5)"
@@ -313,7 +327,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none
@@ -367,7 +381,17 @@ private def peers (name : String) : IO (Array (Chart × Scene × Nav)) := do
         if scene.access.view.isSome then found := found.push (c, scene, nav)
   return found
 
-/-- Give every other chart in `origin`'s group the x range of `view`, which is the origin's, and tell each that changed. -/
+/-- Make `band` the chart's selection and tell the application, without telling the chart's group. -/
+private def applyBand (c : Chart) (band : Option (Selection.Band Float)) : IO Unit := do
+  if (← c.band.get) == band then return
+  c.band.set band
+  let edge (f : Selection.Band Float → Float) : Data := match band with
+    | some b => toJS (f b)
+    | none => .null
+  dispatch c.el "inkproof-select" (obj [("xStart", edge (·.lo)), ("xEnd", edge (·.hi))])
+  invalidate c
+
+/-- Give every other chart in `origin`'s group the x range of `view`, which is the origin's, and tell each that changed. A chart that selects keeps its own range and moves its band to it. -/
 private def followFrom (origin : Chart) (view : View Float) : IO Unit := do
   let some name ← origin.group.get | return
   let members ← peers name
@@ -375,11 +399,26 @@ private def followFrom (origin : Chart) (view : View Float) : IO Unit := do
   let views := Linked.followArray (members.map (·.2.2.view)) i view
   for h : j in [0:members.size] do
     let (c, scene, nav) := members[j]
-    let next := views[j]?.getD nav.view
-    if j != i && next != nav.view then
-      c.nav.set (some { nav with view := next })
-      log .debug "chart followed its group" [("group", name), ("chart", toString c.id)]
-      announceView c scene next
+    if j == i then continue
+    if (← c.selectMode.get) != .off then
+      if let some config := scene.access.view then applyBand c (Select.following config view)
+    else
+      let next := views[j]?.getD nav.view
+      if next != nav.view then
+        c.nav.set (some { nav with view := next })
+        log .debug "chart followed its group" [("group", name), ("chart", toString c.id)]
+        announceView c scene next
+
+/-- The view a chart gives its group: its own, or for one that selects, the one that shows its band. -/
+private def groupView (c : Chart) (nav : Nav) : IO (View Float) := do
+  match ← c.band.get with
+  | some band => return Select.shown nav.view band
+  | none => return nav.view
+
+/-- Make `band` the chart's selection, and the x range of the rest of its group. -/
+private def selectBand (c : Chart) (band : Option (Selection.Band Float)) : IO Unit := do
+  applyBand c band
+  if let (some band, some nav) := (band, ← c.nav.get) then followFrom c (Select.shown nav.view band)
 
 /-- Put the cursor at `pos`, or take it away, and redraw if that changed it. -/
 private def moveCursor (c : Chart) (pos : Option (Float × Option Float)) : IO Unit := do
@@ -420,6 +459,8 @@ private def onKey (c : Chart) (event : Value) : IO Unit := do
   if (← held "ctrlKey") || (← held "altKey") || (← held "metaKey") then return
   let key ← event.get "key" String
   let some command := Command.ofKey key (← held "shiftKey") | return
+  if (← c.selectMode.get) != .off then
+    if let .view _ := command then return
   event.callMethod "preventDefault" #[] Unit
   commit c scene nav (nav.apply navConfig command)
 
@@ -435,6 +476,7 @@ private def applyInputs (c : Chart) (inputs : List (Input Float)) : IO Unit := d
   commit c scene nav (inputs.foldl (·.input navConfig ·) nav)
 
 private def onWheel (c : Chart) (event : Value) : IO Unit := do
+  if (← c.selectMode.get) != .off then return
   let some (_, navConfig, _) ← navigable c | return
   let pos ← position c event
   unless Gesture.inside navConfig.view pos do return
@@ -444,11 +486,23 @@ private def onWheel (c : Chart) (event : Value) : IO Unit := do
   let factor := Gesture.wheelFactor (scale * (← event.get "deltaY" Float))
   applyInputs c [.wheel p.1 p.2 factor]
 
+/-- The data x position at plot position `p`. -/
+private def dataX (navConfig : NavConfig) (nav : Nav) (p : Px) : Float :=
+  let v := Gesture.toView navConfig.view p
+  (View.cursor navConfig.view nav.view v.1 v.2).1
+
 private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
-  let some (_, navConfig, _) ← navigable c | return
+  let some (_, navConfig, nav) ← navigable c | return
   let id ← event.get "pointerId" Nat
   let p ← position c event
   unless Gesture.inside navConfig.view p do return
+  if (← c.selectMode.get) != .off then
+    if (← c.selectDrag.get).isNone then
+      try c.el.callMethod "setPointerCapture" #[toJS id] Unit
+      catch e => log .warn "pointer capture failed, continuing without it" [("error", toString e)]
+      let x := dataX navConfig nav p
+      c.selectDrag.set (some (Selection.press (Select.config navConfig.view) (← c.band.get) x))
+    return
   c.pointers.modify (·.filter (·.1 != id) |>.push (id, p))
   -- A pointer the browser no longer considers active cannot be captured; the gesture still works.
   try c.el.callMethod "setPointerCapture" #[toJS id] Unit
@@ -467,6 +521,8 @@ private def onPointerMove (c : Chart) (event : Value) : IO Unit := do
   let id ← event.get "pointerId" Nat
   let p ← position c event
   let tracked ← c.pointers.get
+  if let some drag ← c.selectDrag.get then
+    selectBand c (Selection.Drag.at (Select.config navConfig.view) drag (dataX navConfig nav p))
   if tracked.any (·.1 == id) then
     let toView := Gesture.toView navConfig.view
     let moved := tracked.map fun t => if t.1 == id then (id, p) else t
@@ -491,6 +547,7 @@ private def onPointerMove (c : Chart) (event : Value) : IO Unit := do
 
 private def onPointerUp (c : Chart) (event : Value) : IO Unit := do
   let id ← event.get "pointerId" Nat
+  c.selectDrag.set none
   if let some start ← c.boxStart.get then
     c.boxStart.set none
     if (← event.get "type" String) == "pointerup" then
@@ -501,7 +558,7 @@ private def onPointerUp (c : Chart) (event : Value) : IO Unit := do
 /-- Take the x range of the chart's group, if others are in it. -/
 private def joinGroup (c : Chart) : IO Unit := do
   let some name ← c.group.get | return
-  if let some (p, _, nav) := (← peers name).find? (·.1.id != c.id) then followFrom p nav.view
+  if let some (p, _, nav) := (← peers name).find? (·.1.id != c.id) then followFrom p (← groupView p nav)
 
 private def load (c : Chart) (loader : String → Async Scene) : Async Unit := do
   let src ← getAttr c.el "src"
@@ -511,11 +568,14 @@ private def load (c : Chart) (loader : String → Async Scene) : Async Unit := d
   let drag ← getAttr c.el "drag"
   let groupName ← getAttr c.el "group"
   let cursorName ← getAttr c.el "cursor"
-  match ChartAttrs.parse src level, BoxConfig.parse boxAxes boxMin, DragMode.parse drag, Group.parse groupName, CursorMode.parse cursorName with
-  | .error message, _, _, _, _ | _, .error message, _, _, _ | _, _, .error message, _, _ | _, _, _, .error message, _
-  | _, _, _, _, .error message => fail c message []
-  | .ok attrs, .ok box, .ok mode, .ok group, .ok cursor =>
+  let selectName ← getAttr c.el "select"
+  match ChartAttrs.parse src level, BoxConfig.parse boxAxes boxMin, DragMode.parse drag, Group.parse groupName, CursorMode.parse cursorName,
+      SelectMode.parse selectName with
+  | .error message, _, _, _, _, _ | _, .error message, _, _, _, _ | _, _, .error message, _, _, _ | _, _, _, .error message, _, _
+  | _, _, _, _, .error message, _ | _, _, _, _, _, .error message => fail c message []
+  | .ok attrs, .ok box, .ok mode, .ok group, .ok cursor, .ok select =>
     c.cursorMode.set cursor
+    c.selectMode.set select
     c.boxConfig.set box
     c.dragMode.set mode
     c.group.set group
@@ -556,6 +616,13 @@ def setCursor (el : Value) (x : Option Float) : IO Unit := do
   let some c ← chartOfElement el | return
   unless (← c.alive.get) do return
   moveCursor c (x.map (·, none))
+
+/-- Select the x range `range` of a chart with the `select` attribute, as a drag would, or clear its selection. Other charts in its group take the range as theirs. -/
+def setSelection (el : Value) (range : Option (Float × Float)) : IO Unit := do
+  let some c ← chartOfElement el | return
+  unless (← c.alive.get) && (← c.selectMode.get) != .off do return
+  let some (_, navConfig, _) ← navigable c | return
+  selectBand c (range.bind fun (lo, hi) => Selection.draw (Select.config navConfig.view) lo hi)
 
 /-- Apply `command` to the chart as the key for it would, telling the application of what changed. -/
 def apply (el : Value) (command : Command) : IO Unit := do
@@ -624,19 +691,30 @@ private def recursor (c : Chart) (value : Option String) : IO Unit := do
     c.cursorMode.set mode
     invalidate c
 
+/-- A change of `select` starts or stops the chart's selecting without reloading it; stopping drops its band. -/
+private def reselect (c : Chart) (value : Option String) : IO Unit := do
+  match SelectMode.parse value with
+  | .error message => fail c message []
+  | .ok mode =>
+    c.selectMode.set mode
+    c.selectDrag.set none
+    if mode == .off then applyBand c none
+    invalidate c
+
 private def changed (loader : String → Async Scene) (args : Array Data) : Async Unit := do
   if let some c ← chartOf args then
     if (← c.alive.get) then
       match args[1]? with
       | some (.string "group") => regroup c (← getAttr c.el "group")
       | some (.string "cursor") => recursor c (← getAttr c.el "cursor")
+      | some (.string "select") => reselect c (← getAttr c.el "select")
       | _ => load c loader
 
 /-- Define the custom element `tag`: it draws the scene `loader` makes of its `src` attribute. -/
 def register (tag : String) (loader : String → Async Scene := fetchScene) : IO Unit := do
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor"]
+  defineElement tag #["src", "log-level", "group", "cursor", "select"]
     (← Function.ofFn (connect loader · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))

@@ -12,5 +12,6 @@ import Inkproof.Web.Pointer
 import Inkproof.Web.Box
 import Inkproof.Web.Cursor
 import Inkproof.Web.Group
+import Inkproof.Web.Select
 
 /-! # Inkproof.Web -/
