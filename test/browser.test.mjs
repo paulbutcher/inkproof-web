@@ -584,6 +584,9 @@ test('a cursor follows the pointer and shows on the other charts of its group', 
   await settle(page);
   assert.notDeepEqual(await read('a'), before.a, 'the chart under the pointer draws the cursor');
   assert.notDeepEqual(await read('b'), before.b, 'the other chart in the group draws it too');
+  const legendB = () => page.evaluate(() =>
+    [...document.getElementById('b').shadowRoot.querySelectorAll('.legend .readout, .legend button')].map(e => e.textContent));
+  assert.match((await legendB())[0], /^x: /, 'the legend of the other chart reads the cursor');
   await point('a', 'pointerleave');
   await settle(page);
   assert.deepEqual(await read('b'), before.b, 'leaving takes the cursor away');
@@ -708,9 +711,14 @@ test('the tooltip names the nearest visible point and the legend gives each seri
   const text = sel => page.evaluate(sel => document.getElementById('a').shadowRoot.querySelector(sel).textContent, sel);
   const legend = () => page.evaluate(() =>
     [...document.getElementById('a').shadowRoot.querySelectorAll('.legend button')].map(b => b.textContent));
-  assert.deepEqual(await legend(), ['North: -', 'South: -'], 'with no cursor there are no values');
+  const away = await legend();
+  assert.equal(away.length, 2);
+  assert.ok(away.every(t => /^\w+: \S+ \(last\)$/.test(t)), `with no cursor each row gives its last value, got ${away}`);
+  const readout = () => page.evaluate(() => document.getElementById('a').shadowRoot.querySelector('.legend .readout')?.textContent ?? null);
+  assert.equal(await readout(), null, 'with no cursor there is no readout');
   await move(130);
   assert.deepEqual(await legend(), ['North: 30', 'South: 70'], 'each value is the series at the cursor x');
+  assert.match(await readout(), /^x: 25, y: /, 'the readout gives the position under the cursor');
   assert.equal(await text('.tip'), 'North: 25, 30');
   await move(40);
   assert.equal(await text('.tip'), 'South: 25, 70', 'the nearest point changes with the pointer');

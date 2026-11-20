@@ -121,6 +121,7 @@ private structure Chart where
   group : IO.Ref (Option String)
   dragMode : IO.Ref DragMode
   cursorMode : IO.Ref CursorMode
+  cursorDotted : IO.Ref Bool
   tooltipMode : IO.Ref (Option Metric)
   legendOn : IO.Ref Bool
   /-- Which series the legend has hidden, by index. -/
@@ -246,12 +247,14 @@ private def draw (c : Chart) : IO Unit := do
     let view := ((← c.nav.get).map (·.view)).getD (View.home config)
     c.ctx.set "strokeStyle" "rgba(0, 0, 0, 0.5)"
     c.ctx.set "lineWidth" 1
+    c.ctx.callMethod "setLineDash" #[toJS (if (← c.cursorDotted.get) then #[(2 : Float), 3] else #[])] Unit
     let origin := scene.access.plotOrigin
     for l in Cursor.lines (← c.cursorMode.get) config view x y do
       c.ctx.callMethod "beginPath" #[] Unit
       c.ctx.callMethod "moveTo" #[toJS (origin.1 + l.x₁), toJS (origin.2 + l.y₁)] Unit
       c.ctx.callMethod "lineTo" #[toJS (origin.1 + l.x₂), toJS (origin.2 + l.y₂)] Unit
       c.ctx.callMethod "stroke" #[] Unit
+    c.ctx.callMethod "setLineDash" #[toJS (#[] : Array Float)] Unit
   dispatch c.el "inkproof-draw" (obj [("width", toJS size.width), ("height", toJS size.height)])
 
 private def onFrame (c : Chart) : IO Unit := do
@@ -305,7 +308,7 @@ private def styles : String :=
   ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host{touch-action:none}" ++
   ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:nowrap;padding:2px 6px;background:#fff;border:1px solid #888;font:12px sans-serif}" ++
   ".legend{position:absolute;top:0;right:0;display:flex;flex-direction:column;font:12px sans-serif}.legend button{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit;cursor:pointer}" ++
-  ".legend button[aria-pressed=false]{opacity:0.4}.swatch{display:inline-block;width:10px;height:10px}" ++
+  ".legend .readout{text-align:right}.legend button[aria-pressed=false]{opacity:0.4}.swatch{display:inline-block;width:10px;height:10px}" ++
   ".hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}" ++
   ":host([show-table]) canvas{display:none}:host([show-table]) .hidden:not([aria-live]){position:static;width:100%;height:auto;overflow:auto;clip-path:none}"
 
@@ -346,7 +349,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, tooltipMode := ← IO.mkRef none, legendOn := ← IO.mkRef false, hidden := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipMode := ← IO.mkRef none, legendOn := ← IO.mkRef false, hidden := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none
@@ -475,7 +478,13 @@ private def showLegend (c : Chart) (scene : Scene) : IO Unit := do
   let doc ← (← global).get "document"
   c.legendEl.callMethod "replaceChildren" #[] Unit
   unless (← c.legendOn.get) do return
-  let cursorX := (← c.cursor.get).map (·.1)
+  let cursor ← c.cursor.get
+  let cursorX := cursor.map (·.1)
+  if let some (x, y) := cursor then
+    let readout ← newElement doc "div"
+    readout.set "className" "readout"
+    readout.set "textContent" (Legend.readout x y)
+    c.legendEl.callMethod "append" #[toJS readout] Unit
   let rows := Legend.rows (← activeTraces c scene) cursorX
   for (row, i) in rows.zipIdx do
     let button ← newElement doc "button"
@@ -655,6 +664,7 @@ private def load (c : Chart) (loader : String → Async Scene) : Async Unit := d
   let drag ← getAttr c.el "drag"
   let groupName ← getAttr c.el "group"
   let cursorName ← getAttr c.el "cursor"
+  let dotted ← getAttr c.el "cursor-dotted"
   let tooltipName ← getAttr c.el "tooltip"
   let legendName ← getAttr c.el "legend"
   let selectName ← getAttr c.el "select"
@@ -669,6 +679,7 @@ private def load (c : Chart) (loader : String → Async Scene) : Async Unit := d
       c.tooltipMode.set tooltip
       c.legendOn.set legend
     c.cursorMode.set cursor
+    c.cursorDotted.set dotted.isSome
     c.selectMode.set select
     c.boxConfig.set box
     c.dragMode.set mode
@@ -858,6 +869,9 @@ private def changed (loader : String → Async Scene) (args : Array Data) : Asyn
       match args[1]? with
       | some (.string "group") => regroup c (← getAttr c.el "group")
       | some (.string "cursor") => recursor c (← getAttr c.el "cursor")
+      | some (.string "cursor-dotted") =>
+        c.cursorDotted.set (← getAttr c.el "cursor-dotted").isSome
+        invalidate c
       | some (.string "select") => reselect c (← getAttr c.el "select")
       | some (.string "tooltip") | some (.string "legend") => reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend")
       | _ => load c loader
@@ -867,7 +881,7 @@ def register (tag : String) (loader : String → Async Scene := fetchScene) (but
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor", "select", "tooltip", "legend"]
+  defineElement tag #["src", "log-level", "group", "cursor", "select", "tooltip", "legend", "cursor-dotted"]
     (← Function.ofFn (connect loader · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))

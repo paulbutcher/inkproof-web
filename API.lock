@@ -102,12 +102,14 @@ theorem Inkproof.Web.Group.toggled_unlinked : ∀ (named : Option String), Inkpr
 def Inkproof.Web.Legend.parse : Option String → Except String Bool
 theorem Inkproof.Web.Legend.parse_empty : Inkproof.Web.Legend.parse (Option.some "") = Except.ok Bool.true
 theorem Inkproof.Web.Legend.parse_none : Inkproof.Web.Legend.parse Option.none = Except.ok Bool.false
+def Inkproof.Web.Legend.readout : Float → Option Float → String
+theorem Inkproof.Web.Legend.readout_eq : ∀ (x : Float) (y : Option Float), Inkproof.Web.Legend.readout x y = match y with | Option.some y => ToString.toString "x: " ++ ToString.toString (Inkproof.Web.showFloat x) ++ ToString.toString ", y: " ++ ToString.toString (Inkproof.Web.showFloat y) | Option.none => ToString.toString "x: " ++ ToString.toString (Inkproof.Web.showFloat x)
 def Inkproof.Web.Legend.rows : Array Inkproof.Web.Trace → Option Float → Array Inkproof.Web.LegendRow
-theorem Inkproof.Web.Legend.rows_getElem? : ∀ (traces : Array Inkproof.Web.Trace) (x : Option Float) (i : Nat), (Inkproof.Web.Legend.rows traces x)[i]? = Option.map (fun t => { name := t.name, color := t.color, hidden := t.hidden, value := x.bind t.valueAt }) traces[i]?
+theorem Inkproof.Web.Legend.rows_getElem? : ∀ (traces : Array Inkproof.Web.Trace) (x : Option Float) (i : Nat), (Inkproof.Web.Legend.rows traces x)[i]? = Option.map (fun t => { name := t.name, color := t.color, hidden := t.hidden, value := x.elim t.ys.back? t.valueAt, last := x.isNone }) traces[i]?
+theorem Inkproof.Web.Legend.rows_last : ∀ (traces : Array Inkproof.Web.Trace) (r : Inkproof.Web.LegendRow), r ∈ Inkproof.Web.Legend.rows traces Option.none → r.last = Bool.true
 theorem Inkproof.Web.Legend.rows_size : ∀ (traces : Array Inkproof.Web.Trace) (x : Option Float), (Inkproof.Web.Legend.rows traces x).size = traces.size
-theorem Inkproof.Web.Legend.rows_value_none : ∀ (traces : Array Inkproof.Web.Trace) (r : Inkproof.Web.LegendRow), r ∈ Inkproof.Web.Legend.rows traces Option.none → r.value = Option.none
 def Inkproof.Web.Legend.text : Inkproof.Web.LegendRow → String
-theorem Inkproof.Web.Legend.text_eq : ∀ (r : Inkproof.Web.LegendRow), Inkproof.Web.Legend.text r = ToString.toString r.name ++ ToString.toString ": " ++ ToString.toString ((Option.map Inkproof.Web.showFloat r.value).getD "-")
+theorem Inkproof.Web.Legend.text_eq : ∀ (r : Inkproof.Web.LegendRow), Inkproof.Web.Legend.text r = ToString.toString r.name ++ ToString.toString ": " ++ ToString.toString ((Option.map Inkproof.Web.showFloat r.value).getD "-") ++ ToString.toString (if r.last = Bool.true then " (last)" else "")
 def Inkproof.Web.Legend.toggle : Array Inkproof.Web.Trace → Nat → Array Inkproof.Web.Trace
 theorem Inkproof.Web.Legend.toggle_hidden : ∀ (traces : Array Inkproof.Web.Trace) (i : Nat), Option.map (fun x => x.hidden) (Inkproof.Web.Legend.toggle traces i)[i]? = Option.map (fun x => !x.hidden) traces[i]?
 theorem Inkproof.Web.Legend.toggle_size : ∀ (traces : Array Inkproof.Web.Trace) (i : Nat), (Inkproof.Web.Legend.toggle traces i).size = traces.size
@@ -116,7 +118,8 @@ theorem Inkproof.Web.Legend.tooltip_eq : ∀ (traces : Array Inkproof.Web.Trace)
 structure Inkproof.Web.LegendRow : Type
 field Inkproof.Web.LegendRow.color : Inkproof.Web.LegendRow → String
 field Inkproof.Web.LegendRow.hidden : Inkproof.Web.LegendRow → Bool
-constructor Inkproof.Web.LegendRow.mk : String → String → Bool → Option Float → Inkproof.Web.LegendRow
+field Inkproof.Web.LegendRow.last : Inkproof.Web.LegendRow → Bool
+constructor Inkproof.Web.LegendRow.mk : String → String → Bool → Option Float → Bool → Inkproof.Web.LegendRow
 field Inkproof.Web.LegendRow.name : Inkproof.Web.LegendRow → String
 field Inkproof.Web.LegendRow.value : Inkproof.Web.LegendRow → Option Float
 inductive Inkproof.Web.Level : Type

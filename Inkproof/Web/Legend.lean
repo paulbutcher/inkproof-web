@@ -8,12 +8,13 @@ namespace Inkproof.Web
 
 open Inkproof.Float
 
-/-- One legend entry: a series with its colour, whether it is hidden, and its value at the cursor. -/
+/-- One legend entry: a series with its colour, whether it is hidden, and its value, at the cursor or, when `last`, at the end of the series. -/
 structure LegendRow where
   name : String
   color : String
   hidden : Bool
   value : Option Float
+  last : Bool
 
 namespace Trace
 
@@ -32,26 +33,40 @@ end Trace
 
 namespace Legend
 
-/-- The rows for `traces` with the cursor at data position `x`; none shows no values. -/
+/-- The rows for `traces` with the cursor at data position `x`; with none each shows its series' last value. -/
 def rows (traces : Array Trace) (x : Option Float) : Array LegendRow :=
-  traces.map fun t => { name := t.name, color := t.color, hidden := t.hidden, value := x.bind t.valueAt }
+  traces.map fun t =>
+    { name := t.name, color := t.color, hidden := t.hidden, value := x.elim t.ys.back? t.valueAt, last := x.isNone }
 
-/-- What a row reads as: its name, then its value or a dash. -/
+/-- What a row reads as: its name, then its value or a dash, marked when it is the last value. -/
 def text (r : LegendRow) : String :=
-  s!"{r.name}: {(r.value.map showFloat).getD "-"}"
+  s!"{r.name}: {(r.value.map showFloat).getD "-"}{if r.last then " (last)" else ""}"
+
+/-- What the cursor readout says: the x position, and the y position when the pointer is over the chart. -/
+def readout (x : Float) (y : Option Float) : String :=
+  match y with
+  | some y => s!"x: {showFloat x}, y: {showFloat y}"
+  | none => s!"x: {showFloat x}"
+
+theorem readout_eq (x : Float) (y : Option Float) :
+    readout x y = match y with
+      | some y => s!"x: {showFloat x}, y: {showFloat y}"
+      | none => s!"x: {showFloat x}" := rfl
 
 theorem rows_size (traces : Array Trace) (x : Option Float) : (rows traces x).size = traces.size := by
   simp [rows]
 
 theorem rows_getElem? (traces : Array Trace) (x : Option Float) (i : Nat) :
     (rows traces x)[i]? =
-      traces[i]?.map fun t => { name := t.name, color := t.color, hidden := t.hidden, value := x.bind t.valueAt } := by
+      traces[i]?.map fun t =>
+        { name := t.name, color := t.color, hidden := t.hidden, value := x.elim t.ys.back? t.valueAt, last := x.isNone } := by
   simp [rows]
 
-theorem rows_value_none (traces : Array Trace) : ∀ r ∈ rows traces none, r.value = none := by
+theorem rows_last (traces : Array Trace) : ∀ r ∈ rows traces none, r.last = true := by
   simp [rows]
 
-theorem text_eq (r : LegendRow) : text r = s!"{r.name}: {(r.value.map showFloat).getD "-"}" := rfl
+theorem text_eq (r : LegendRow) :
+    text r = s!"{r.name}: {(r.value.map showFloat).getD "-"}{if r.last then " (last)" else ""}" := rfl
 
 /-- Validate the raw `legend` attribute: present (empty or `on`) shows the legend, a missing one or `off` does not. -/
 def parse : Option String → Except String Bool
