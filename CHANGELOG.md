@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.15.0]
+
+- A legend row shows its series' last value, marked "(last)", when the cursor is away.
+- The legend starts with a readout of the cursor's position.
+- The `cursor-dotted` attribute draws the cursor lines dotted.
+
 ## [0.14.1]
 
 - A pointer press on a legend entry no longer reaches the chart's pointer capture, so a real click hides or shows its series.
