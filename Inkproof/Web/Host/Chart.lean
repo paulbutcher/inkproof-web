@@ -15,6 +15,7 @@ import Inkproof.Web.Access
 import Inkproof.Web.Pointer
 import Inkproof.Web.Box
 import Inkproof.Web.Cursor
+import Inkproof.Web.Legend
 import Inkproof.Web.Group
 import Inkproof.Web.Select
 import Inkproof.Web.Events
@@ -110,6 +111,8 @@ private structure Chart where
   ctx : Value
   announcer : Value
   table : Value
+  tip : Value
+  legendEl : Value
   nav : IO.Ref (Option Nav)
   listeners : IO.Ref (Array (String × Value))
   pointers : IO.Ref (Array (Nat × Px))
@@ -118,6 +121,10 @@ private structure Chart where
   group : IO.Ref (Option String)
   dragMode : IO.Ref DragMode
   cursorMode : IO.Ref CursorMode
+  tooltipMode : IO.Ref (Option Metric)
+  legendOn : IO.Ref Bool
+  /-- Which series the legend has hidden, by index. -/
+  hidden : IO.Ref (Array Bool)
   selectMode : IO.Ref SelectMode
   /-- The selected x range, in data coordinates. -/
   band : IO.Ref (Option (Selection.Band Float))
@@ -296,6 +303,9 @@ private partial def watchRatio (c : Chart) : IO Unit := do
 
 private def styles : String :=
   ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host{touch-action:none}" ++
+  ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:nowrap;padding:2px 6px;background:#fff;border:1px solid #888;font:12px sans-serif}" ++
+  ".legend{position:absolute;top:0;right:0;display:flex;flex-direction:column;font:12px sans-serif}.legend button{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit;cursor:pointer}" ++
+  ".legend button[aria-pressed=false]{opacity:0.4}.swatch{display:inline-block;width:10px;height:10px}" ++
   ".hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}" ++
   ":host([show-table]) canvas{display:none}:host([show-table]) .hidden:not([aria-live]){position:static;width:100%;height:auto;overflow:auto;clip-path:none}"
 
@@ -320,15 +330,23 @@ private def build (id : Nat) (el : Value) : IO Chart := do
       wrapper.callMethod "append" #[toJS table] Unit
       root.callMethod "append" #[toJS announcer, toJS wrapper] Unit
       pure root
+  for old in ["tip", "legend"] do
+    if let some e ← Web.Support.optionalValue (← root.callMethod "querySelector" #[toJS s!".{old}"] Data) then
+      e.callMethod "remove" #[] Unit
+  let tip ← newElement doc "div"
+  tip.set "className" "tip"
+  let legendEl ← newElement doc "div"
+  legendEl.set "className" "legend"
+  root.callMethod "append" #[toJS tip, toJS legendEl] Unit
   let canvas ← root.callMethod "querySelector" #[toJS "canvas"]
   let announcer ← root.callMethod "querySelector" #[toJS "div"]
   let table ← root.callMethod "querySelector" #[toJS "table"]
   let ctx ← canvas.callMethod "getContext" #[toJS "2d"]
   return {
-    id, el, canvas, ctx, announcer, table
+    id, el, canvas, ctx, announcer, table, tip, legendEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, tooltipMode := ← IO.mkRef none, legendOn := ← IO.mkRef false, hidden := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none
@@ -421,6 +439,62 @@ private def selectBand (c : Chart) (band : Option (Selection.Band Float)) : IO U
   applyBand c band
   if let (some band, some nav) := (band, ← c.nav.get) then followFrom c (Select.shown nav.view band)
 
+/-- The scene's traces with the legend's choice of which are hidden. -/
+private def activeTraces (c : Chart) (scene : Scene) : IO (Array Trace) := do
+  let mask ← c.hidden.get
+  return scene.access.traces.mapIdx fun i t => { t with hidden := mask[i]?.getD t.hidden }
+
+/-- Keep the legend's hidden series across scenes, unless the new scene has a different number of series, when its own flags apply. -/
+private def adoptTraces (c : Chart) (scene : Scene) : IO Unit :=
+  c.hidden.modify fun mask =>
+    if mask.size == scene.access.traces.size then mask else scene.access.traces.map (·.hidden)
+
+private def showTooltip (c : Chart) (scene : Scene) : IO Unit := do
+  let off : IO Unit := do
+    c.tip.get "style" Value >>= (·.set "display" "none")
+    c.tip.set "textContent" ""
+  let (some metric, some (x, y), some config) := (← c.tooltipMode.get, ← c.cursor.get, scene.access.view) | off
+  let view := ((← c.nav.get).map (·.view)).getD (View.home config)
+  let traces ← activeTraces c scene
+  let py := (y.map fun y => config.y.length - view.y.toScreen config.y y).getD 0
+  let px := view.x.toScreen config.x x
+  let screen := traces.map (·.onScreen config view)
+  match Nearest.find metric screen px py, (metric == .plane && y.isNone) with
+  | some hit, false =>
+    match Legend.tooltip traces hit with
+    | some text =>
+      let style ← c.tip.get "style" Value
+      c.tip.set "textContent" text
+      style.set "left" s!"{scene.access.plotOrigin.1 + hit.x + 8}px"
+      style.set "top" s!"{scene.access.plotOrigin.2 + hit.y - 8}px"
+      style.set "display" "block"
+    | none => off
+  | _, _ => off
+
+private def showLegend (c : Chart) (scene : Scene) : IO Unit := do
+  let doc ← (← global).get "document"
+  c.legendEl.callMethod "replaceChildren" #[] Unit
+  unless (← c.legendOn.get) do return
+  let cursorX := (← c.cursor.get).map (·.1)
+  let rows := Legend.rows (← activeTraces c scene) cursorX
+  for (row, i) in rows.zipIdx do
+    let button ← newElement doc "button"
+    button.callMethod "setAttribute" #[toJS "data-series", toJS (toString i)] Unit
+    button.callMethod "setAttribute" #[toJS "aria-pressed", toJS (toString !row.hidden)] Unit
+    let swatch ← newElement doc "span"
+    swatch.set "className" "swatch"
+    (← swatch.get "style" Value).set "background" row.color
+    let label ← newElement doc "span"
+    label.set "textContent" (Legend.text row)
+    button.callMethod "append" #[toJS swatch, toJS label] Unit
+    c.legendEl.callMethod "append" #[toJS button] Unit
+
+/-- Bring the tooltip and legend up to date with the cursor, the scene and the hidden series. -/
+private def refreshProbe (c : Chart) : IO Unit := do
+  if let some scene ← c.scene.get then
+    showTooltip c scene
+    showLegend c scene
+
 /-- Put the cursor at `pos`, or take it away, and redraw if that changed it. -/
 private def moveCursor (c : Chart) (pos : Option (Float × Option Float)) : IO Unit := do
   let old ← c.cursor.get
@@ -430,6 +504,7 @@ private def moveCursor (c : Chart) (pos : Option (Float × Option Float)) : IO U
     | _, _ => false
   unless same do
     c.cursor.set pos
+    refreshProbe c
     if (← c.cursorMode.get) != .off then invalidate c
 
 /-- Show the cursor at x position `x` on every other chart in `origin`'s group, which share the axis, or take it from them. -/
@@ -511,6 +586,17 @@ private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
   let boxes := (← c.dragMode.get).boxes (← event.get "shiftKey" Bool)
   c.boxStart.set (if (← c.pointers.get).size == 1 && boxes then some p else none)
 
+/-- A click on a legend entry hides or shows its series, and tells the application, which answers by drawing the scene without it. -/
+private def onLegendClick (c : Chart) (event : Value) : IO Unit := do
+  let target ← event.get "target" Value
+  let some button ← Web.Support.optionalValue (← target.callMethod "closest" #[toJS "button"] Data) | return
+  let some index := (← button.callMethod "getAttribute" #[toJS "data-series"] String).toNat? | return
+  let some scene ← c.scene.get | return
+  let hidden := (Legend.toggle (← activeTraces c scene) index).map (·.hidden)
+  c.hidden.set hidden
+  dispatch c.el "inkproof-series" (obj [("series", toJS index), ("hidden", .bool (hidden[index]?.getD false))])
+  refreshProbe c
+
 private def clearCursor (c : Chart) : IO Unit := do
   moveCursor c none
   shareCursor c none
@@ -569,12 +655,19 @@ private def load (c : Chart) (loader : String → Async Scene) : Async Unit := d
   let drag ← getAttr c.el "drag"
   let groupName ← getAttr c.el "group"
   let cursorName ← getAttr c.el "cursor"
+  let tooltipName ← getAttr c.el "tooltip"
+  let legendName ← getAttr c.el "legend"
   let selectName ← getAttr c.el "select"
   match ChartAttrs.parse src level, BoxConfig.parse boxAxes boxMin, DragMode.parse drag, Group.parse groupName, CursorMode.parse cursorName,
       SelectMode.parse selectName with
   | .error message, _, _, _, _, _ | _, .error message, _, _, _, _ | _, _, .error message, _, _, _ | _, _, _, .error message, _, _
   | _, _, _, _, .error message, _ | _, _, _, _, _, .error message => fail c message []
   | .ok attrs, .ok box, .ok mode, .ok group, .ok cursor, .ok select =>
+    match Metric.parse tooltipName, Legend.parse legendName with
+    | .error message, _ | _, .error message => fail c message []
+    | .ok tooltip, .ok legend =>
+      c.tooltipMode.set tooltip
+      c.legendOn.set legend
     c.cursorMode.set cursor
     c.selectMode.set select
     c.boxConfig.set box
@@ -588,7 +681,9 @@ private def load (c : Chart) (loader : String → Async Scene) : Async Unit := d
       -- A newer load or a disconnect has overtaken this one.
       if (← c.generation.get) == generation && (← c.alive.get) then
         c.scene.set (some scene)
+        adoptTraces c scene
         publish c scene.access
+        refreshProbe c
         joinGroup c
         invalidate c
     catch e =>
@@ -605,11 +700,13 @@ def setScene (el : Value) (scene : Scene) : IO Unit := do
   unless (← c.alive.get) do return
   let kept := (← c.nav.get).map (Nav.clamp scene.access.points scene.access.series.size)
   c.scene.set (some scene)
+  adoptTraces c scene
   c.nav.set (match scene.access.view, kept with
     | some _, some nav => some nav
     | some v, none => some (Nav.home ⟨v, scene.access.points, scene.access.series.size⟩)
     | none, _ => none)
   describe c scene.access
+  refreshProbe c
   invalidate c
 
 /-- Put the chart's cursor at x position `x` in data coordinates, or take it away, as the pointer over a chart outside its group would. -/
@@ -684,6 +781,10 @@ private def connect (loader : String → Async Scene) (args : Array Data) : Asyn
     let options := if name == "wheel" then obj [("passive", .bool false)] else obj []
     el.callMethod "addEventListener" #[toJS name, toJS listener, options] Unit
     c.listeners.modify (·.push (name, listener))
+  let legendClick ← Function.ofSyncFn fun args => do
+    if let some (Data.ref event _) := args[0]? then onLegendClick c event
+    return .undefined
+  c.legendEl.callMethod "addEventListener" #[toJS "click", toJS legendClick] Unit
   c.frameCallback.set (some (← Function.ofSyncFn fun _ => do onFrame c; return .undefined))
   let observe ← Function.ofSyncFn fun _ => do
     if (← c.alive.get) then sync c
@@ -727,6 +828,15 @@ private def recursor (c : Chart) (value : Option String) : IO Unit := do
     c.cursorMode.set mode
     invalidate c
 
+/-- A change of `tooltip` or `legend` redraws them without reloading the chart. -/
+private def reprobe (c : Chart) (tooltip legend : Option String) : IO Unit := do
+  match Metric.parse tooltip, Legend.parse legend with
+  | .error message, _ | _, .error message => fail c message []
+  | .ok t, .ok l =>
+    c.tooltipMode.set t
+    c.legendOn.set l
+    refreshProbe c
+
 /-- A change of `select` starts or stops the chart's selecting without reloading it; stopping drops its band. -/
 private def reselect (c : Chart) (value : Option String) : IO Unit := do
   match SelectMode.parse value with
@@ -744,6 +854,7 @@ private def changed (loader : String → Async Scene) (args : Array Data) : Asyn
       | some (.string "group") => regroup c (← getAttr c.el "group")
       | some (.string "cursor") => recursor c (← getAttr c.el "cursor")
       | some (.string "select") => reselect c (← getAttr c.el "select")
+      | some (.string "tooltip") | some (.string "legend") => reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend")
       | _ => load c loader
 
 /-- Define the custom element `tag`: it draws the scene `loader` makes of its `src` attribute. With `buttons`, the page's `button[data-reset]` and `button[data-unlink]` act on the charts they name, with no page code. -/
@@ -751,7 +862,7 @@ def register (tag : String) (loader : String → Async Scene := fetchScene) (but
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor", "select"]
+  defineElement tag #["src", "log-level", "group", "cursor", "select", "tooltip", "legend"]
     (← Function.ofFn (connect loader · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))

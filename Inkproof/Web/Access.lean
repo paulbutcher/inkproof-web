@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import Inkproof.Float.RatLemmas
 import Inkproof.Viewport.View
+import Inkproof.Web.Probe
 
 namespace Inkproof.Web
 
@@ -131,6 +132,8 @@ structure Access where
   view : Option (ViewConfig Float) := none
   /-- Where the plot's top left lies in the element, in CSS pixels; its size is the view configuration's two lengths. Pointer positions are taken from here. -/
   plotOrigin : Float × Float := (0, 0)
+  /-- The series' points, which the tooltip and legend read; without them a chart has neither. -/
+  traces : Array Trace := #[]
 
 /-- A number as people write it: no trailing zeros, and no point on a whole number. -/
 def showFloat (f : Float) : String :=

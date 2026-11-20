@@ -15,5 +15,7 @@ import Inkproof.Web.Group
 import Inkproof.Web.Select
 import Inkproof.Web.Events
 import Inkproof.Web.SceneState
+import Inkproof.Web.Probe
+import Inkproof.Web.Legend
 
 /-! # Inkproof.Web -/

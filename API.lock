@@ -2,7 +2,7 @@ structure Inkproof.Web.Access : Type
 def Inkproof.Web.Access.cursorText : Inkproof.Web.Access → Inkproof.Web.Nav → String
 theorem Inkproof.Web.Access.cursorText_eq : ∀ (a : Inkproof.Web.Access) (n : Inkproof.Web.Nav), a.cursorText n = ToString.toString (a.series[n.series]?.getD (ToString.toString "series " ++ ToString.toString (n.series + 1))) ++ ToString.toString ", point " ++ ToString.toString (n.point + 1) ++ ToString.toString " of " ++ ToString.toString a.points
 field Inkproof.Web.Access.header : Inkproof.Web.Access → Array String
-constructor Inkproof.Web.Access.mk : String → Array String → Nat → Option String → Array String → Array (Array String) → Option (Inkproof.Viewport.ViewConfig Float) → Float × Float → Inkproof.Web.Access
+constructor Inkproof.Web.Access.mk : String → Array String → Nat → Option String → Array String → Array (Array String) → Option (Inkproof.Viewport.ViewConfig Float) → Float × Float → Array Inkproof.Web.Trace → Inkproof.Web.Access
 field Inkproof.Web.Access.name : Inkproof.Web.Access → String
 field Inkproof.Web.Access.plotOrigin : Inkproof.Web.Access → Float × Float
 field Inkproof.Web.Access.points : Inkproof.Web.Access → Nat
@@ -11,6 +11,7 @@ field Inkproof.Web.Access.series : Inkproof.Web.Access → Array String
 field Inkproof.Web.Access.summary : Inkproof.Web.Access → Option String
 def Inkproof.Web.Access.summaryText : Inkproof.Web.Access → Option (Inkproof.Viewport.View Float) → String
 theorem Inkproof.Web.Access.summaryText_some : ∀ (a : Inkproof.Web.Access) (s : String) (v : Option (Inkproof.Viewport.View Float)), a.summary = Option.some s → a.summaryText v = s
+field Inkproof.Web.Access.traces : Inkproof.Web.Access → Array Inkproof.Web.Trace
 field Inkproof.Web.Access.view : Inkproof.Web.Access → Option (Inkproof.Viewport.ViewConfig Float)
 structure Inkproof.Web.BoxConfig : Type
 field Inkproof.Web.BoxConfig.axes : Inkproof.Web.BoxConfig → Inkproof.Viewport.Gesture.Axes
@@ -24,6 +25,12 @@ theorem Inkproof.Web.BoxConfig.parse_default : ∃ c, Inkproof.Web.BoxConfig.par
 theorem Inkproof.Web.BoxConfig.parse_minDistance : ∀ (s : String) (n : Nat), s.toNat? = Option.some n → n ≠ 0 → ∃ c, Inkproof.Web.BoxConfig.parse Option.none (Option.some s) = Except.ok c ∧ c.minDistance = n.toFloat
 theorem Inkproof.Web.BoxConfig.parse_minDistance_invalid : ∀ (s : String), s.toNat? = Option.none → ∃ e, Inkproof.Web.BoxConfig.parse Option.none (Option.some s) = Except.error e
 theorem Inkproof.Web.BoxConfig.parse_minDistance_zero : ∀ (s : String), s.toNat? = Option.some 0 → ∃ e, Inkproof.Web.BoxConfig.parse Option.none (Option.some s) = Except.error e
+structure Inkproof.Web.Candidate : Type
+constructor Inkproof.Web.Candidate.mk : Nat → Nat → Float → Float → Inkproof.Web.Candidate
+field Inkproof.Web.Candidate.point : Inkproof.Web.Candidate → Nat
+field Inkproof.Web.Candidate.series : Inkproof.Web.Candidate → Nat
+field Inkproof.Web.Candidate.x : Inkproof.Web.Candidate → Float
+field Inkproof.Web.Candidate.y : Inkproof.Web.Candidate → Float
 structure Inkproof.Web.ChartAttrs : Type
 field Inkproof.Web.ChartAttrs.logLevel : Inkproof.Web.ChartAttrs → Option Inkproof.Web.Level
 constructor Inkproof.Web.ChartAttrs.mk : String → Option Inkproof.Web.Level → Inkproof.Web.ChartAttrs
@@ -92,6 +99,26 @@ theorem Inkproof.Web.Group.parse_none : Inkproof.Web.Group.parse Option.none = E
 def Inkproof.Web.Group.toggled : Option String → Option String → Option String
 theorem Inkproof.Web.Group.toggled_linked : ∀ (name : String) (named : Option String), Inkproof.Web.Group.toggled (Option.some name) named = Option.none
 theorem Inkproof.Web.Group.toggled_unlinked : ∀ (named : Option String), Inkproof.Web.Group.toggled Option.none named = named
+def Inkproof.Web.Legend.parse : Option String → Except String Bool
+theorem Inkproof.Web.Legend.parse_empty : Inkproof.Web.Legend.parse (Option.some "") = Except.ok Bool.true
+theorem Inkproof.Web.Legend.parse_none : Inkproof.Web.Legend.parse Option.none = Except.ok Bool.false
+def Inkproof.Web.Legend.rows : Array Inkproof.Web.Trace → Option Float → Array Inkproof.Web.LegendRow
+theorem Inkproof.Web.Legend.rows_getElem? : ∀ (traces : Array Inkproof.Web.Trace) (x : Option Float) (i : Nat), (Inkproof.Web.Legend.rows traces x)[i]? = Option.map (fun t => { name := t.name, color := t.color, hidden := t.hidden, value := x.bind t.valueAt }) traces[i]?
+theorem Inkproof.Web.Legend.rows_size : ∀ (traces : Array Inkproof.Web.Trace) (x : Option Float), (Inkproof.Web.Legend.rows traces x).size = traces.size
+theorem Inkproof.Web.Legend.rows_value_none : ∀ (traces : Array Inkproof.Web.Trace) (r : Inkproof.Web.LegendRow), r ∈ Inkproof.Web.Legend.rows traces Option.none → r.value = Option.none
+def Inkproof.Web.Legend.text : Inkproof.Web.LegendRow → String
+theorem Inkproof.Web.Legend.text_eq : ∀ (r : Inkproof.Web.LegendRow), Inkproof.Web.Legend.text r = ToString.toString r.name ++ ToString.toString ": " ++ ToString.toString ((Option.map Inkproof.Web.showFloat r.value).getD "-")
+def Inkproof.Web.Legend.toggle : Array Inkproof.Web.Trace → Nat → Array Inkproof.Web.Trace
+theorem Inkproof.Web.Legend.toggle_hidden : ∀ (traces : Array Inkproof.Web.Trace) (i : Nat), Option.map (fun x => x.hidden) (Inkproof.Web.Legend.toggle traces i)[i]? = Option.map (fun x => !x.hidden) traces[i]?
+theorem Inkproof.Web.Legend.toggle_size : ∀ (traces : Array Inkproof.Web.Trace) (i : Nat), (Inkproof.Web.Legend.toggle traces i).size = traces.size
+def Inkproof.Web.Legend.tooltip : Array Inkproof.Web.Trace → Inkproof.Web.Candidate → Option String
+theorem Inkproof.Web.Legend.tooltip_eq : ∀ (traces : Array Inkproof.Web.Trace) (c : Inkproof.Web.Candidate) (t : Inkproof.Web.Trace) (x y : Float), traces[c.series]? = Option.some t → t.xs[c.point]? = Option.some x → t.ys[c.point]? = Option.some y → Inkproof.Web.Legend.tooltip traces c = Option.some (ToString.toString t.name ++ ToString.toString ": " ++ ToString.toString (Inkproof.Web.showFloat x) ++ ToString.toString ", " ++ ToString.toString (Inkproof.Web.showFloat y))
+structure Inkproof.Web.LegendRow : Type
+field Inkproof.Web.LegendRow.color : Inkproof.Web.LegendRow → String
+field Inkproof.Web.LegendRow.hidden : Inkproof.Web.LegendRow → Bool
+constructor Inkproof.Web.LegendRow.mk : String → String → Bool → Option Float → Inkproof.Web.LegendRow
+field Inkproof.Web.LegendRow.name : Inkproof.Web.LegendRow → String
+field Inkproof.Web.LegendRow.value : Inkproof.Web.LegendRow → Option Float
 inductive Inkproof.Web.Level : Type
 constructor Inkproof.Web.Level.debug : Inkproof.Web.Level
 def Inkproof.Web.Level.defaultThreshold : Inkproof.Web.Level
@@ -116,6 +143,17 @@ field Inkproof.Web.Line.x₁ : Inkproof.Web.Line → Float
 field Inkproof.Web.Line.x₂ : Inkproof.Web.Line → Float
 field Inkproof.Web.Line.y₁ : Inkproof.Web.Line → Float
 field Inkproof.Web.Line.y₂ : Inkproof.Web.Line → Float
+inductive Inkproof.Web.Metric : Type
+def Inkproof.Web.Metric.dist : Inkproof.Web.Metric → Float → Float → Inkproof.Web.Candidate → Float
+theorem Inkproof.Web.Metric.dist_plane : ∀ (cx cy : Float) (c : Inkproof.Web.Candidate), Inkproof.Web.Metric.plane.dist cx cy c = (c.x - cx) * (c.x - cx) + (c.y - cy) * (c.y - cy)
+theorem Inkproof.Web.Metric.dist_x : ∀ (cx cy : Float) (c : Inkproof.Web.Candidate), Inkproof.Web.Metric.x.dist cx cy c = (c.x - cx).abs
+def Inkproof.Web.Metric.ofNat : Nat → Inkproof.Web.Metric
+theorem Inkproof.Web.Metric.ofNat_ctorIdx : ∀ (x : Inkproof.Web.Metric), Inkproof.Web.Metric.ofNat x.ctorIdx = x
+def Inkproof.Web.Metric.parse : Option String → Except String (Option Inkproof.Web.Metric)
+theorem Inkproof.Web.Metric.parse_none : Inkproof.Web.Metric.parse Option.none = Except.ok Option.none
+theorem Inkproof.Web.Metric.parse_xy : Inkproof.Web.Metric.parse (Option.some "xy") = Except.ok (Option.some Inkproof.Web.Metric.plane)
+constructor Inkproof.Web.Metric.plane : Inkproof.Web.Metric
+constructor Inkproof.Web.Metric.x : Inkproof.Web.Metric
 def Inkproof.Web.Milli : Type
 structure Inkproof.Web.Nav : Type
 def Inkproof.Web.Nav.apply : Inkproof.Web.NavConfig → Inkproof.Web.Nav → Inkproof.Web.Command → Inkproof.Web.Nav
@@ -143,6 +181,15 @@ constructor Inkproof.Web.NavConfig.mk : Inkproof.Viewport.ViewConfig Float → N
 field Inkproof.Web.NavConfig.points : Inkproof.Web.NavConfig → Nat
 field Inkproof.Web.NavConfig.series : Inkproof.Web.NavConfig → Nat
 field Inkproof.Web.NavConfig.view : Inkproof.Web.NavConfig → Inkproof.Viewport.ViewConfig Float
+def Inkproof.Web.Nearest.argmin : (Inkproof.Web.Candidate → Float) → List Inkproof.Web.Candidate → Option Inkproof.Web.Candidate
+theorem Inkproof.Web.Nearest.argmin_eq_none : ∀ (d : Inkproof.Web.Candidate → Float) (cs : List Inkproof.Web.Candidate), Inkproof.Web.Nearest.argmin d cs = Option.none ↔ cs = []
+theorem Inkproof.Web.Nearest.argmin_least : ∀ (d : Inkproof.Web.Candidate → Float), (∀ (c : Inkproof.Web.Candidate), Inkproof.Float.Float.IsOrdered (d c)) → ∀ (cs : List Inkproof.Web.Candidate) (r : Inkproof.Web.Candidate), Inkproof.Web.Nearest.argmin d cs = Option.some r → ∀ (c : Inkproof.Web.Candidate), c ∈ cs → d r ≤ d c
+theorem Inkproof.Web.Nearest.argmin_mem : ∀ (d : Inkproof.Web.Candidate → Float), (∀ (c : Inkproof.Web.Candidate), Inkproof.Float.Float.IsOrdered (d c)) → ∀ (cs : List Inkproof.Web.Candidate) (r : Inkproof.Web.Candidate), Inkproof.Web.Nearest.argmin d cs = Option.some r → r ∈ cs
+def Inkproof.Web.Nearest.candidates : Array Inkproof.Web.Trace → List Inkproof.Web.Candidate
+def Inkproof.Web.Nearest.find : Inkproof.Web.Metric → Array Inkproof.Web.Trace → Float → Float → Option Inkproof.Web.Candidate
+theorem Inkproof.Web.Nearest.find_least : ∀ (metric : Inkproof.Web.Metric) (traces : Array Inkproof.Web.Trace) (cx cy : Float), (∀ (c : Inkproof.Web.Candidate), Inkproof.Float.Float.IsOrdered (metric.dist cx cy c)) → ∀ (r : Inkproof.Web.Candidate), Inkproof.Web.Nearest.find metric traces cx cy = Option.some r → r ∈ Inkproof.Web.Nearest.candidates traces ∧ ∀ (c : Inkproof.Web.Candidate), c ∈ Inkproof.Web.Nearest.candidates traces → metric.dist cx cy r ≤ metric.dist cx cy c
+theorem Inkproof.Web.Nearest.find_none_iff : ∀ (metric : Inkproof.Web.Metric) (traces : Array Inkproof.Web.Trace) (cx cy : Float), Inkproof.Web.Nearest.find metric traces cx cy = Option.none ↔ Inkproof.Web.Nearest.candidates traces = []
+theorem Inkproof.Web.Nearest.mem_candidates : ∀ (traces : Array Inkproof.Web.Trace) (c : Inkproof.Web.Candidate), c ∈ Inkproof.Web.Nearest.candidates traces ↔ ∃ t, traces[c.series]? = Option.some t ∧ t.hidden = Bool.false ∧ t.xs[c.point]? = Option.some c.x ∧ t.ys[c.point]? = Option.some c.y ∧ c.x.isNaN = Bool.false ∧ c.y.isNaN = Bool.false
 structure Inkproof.Web.SceneState : Type
 field Inkproof.Web.SceneState.cache : Inkproof.Web.SceneState → Inkproof.Gpu.Cache
 def Inkproof.Web.SceneState.current : Nat → Nat → Option Inkproof.Web.SceneState → Inkproof.Web.SceneState
@@ -201,6 +248,20 @@ def Inkproof.Web.TextCache.measurer : Inkproof.Web.TextCache → String → Stri
 theorem Inkproof.Web.TextCache.measurer_insert : ∀ (c : Inkproof.Web.TextCache) (font text : String) (size : Float × Float), (c.insert font text size).measurer font text = size
 constructor Inkproof.Web.TextCache.mk : Std.HashMap (String × String) (Float × Float) → Inkproof.Web.TextCache
 field Inkproof.Web.TextCache.sizes : Inkproof.Web.TextCache → Std.HashMap (String × String) (Float × Float)
+structure Inkproof.Web.Trace : Type
+field Inkproof.Web.Trace.color : Inkproof.Web.Trace → String
+field Inkproof.Web.Trace.hidden : Inkproof.Web.Trace → Bool
+constructor Inkproof.Web.Trace.mk : String → String → Array Float → Array Float → Bool → Inkproof.Web.Trace
+field Inkproof.Web.Trace.name : Inkproof.Web.Trace → String
+def Inkproof.Web.Trace.onScreen : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Inkproof.Web.Trace → Inkproof.Web.Trace
+theorem Inkproof.Web.Trace.onScreen_size : ∀ (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (t : Inkproof.Web.Trace), (Inkproof.Web.Trace.onScreen config view t).xs.size = t.xs.size ∧ (Inkproof.Web.Trace.onScreen config view t).ys.size = t.ys.size
+theorem Inkproof.Web.Trace.onScreen_xs : ∀ (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (t : Inkproof.Web.Trace), (Inkproof.Web.Trace.onScreen config view t).xs = Array.map (Inkproof.Viewport.Interval.toScreen config.x view.x) t.xs
+theorem Inkproof.Web.Trace.onScreen_ys : ∀ (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (t : Inkproof.Web.Trace), (Inkproof.Web.Trace.onScreen config view t).ys = Array.map (fun y => config.y.length - Inkproof.Viewport.Interval.toScreen config.y view.y y) t.ys
+def Inkproof.Web.Trace.valueAt : Inkproof.Web.Trace → Float → Option Float
+theorem Inkproof.Web.Trace.valueAt_eq : ∀ (t : Inkproof.Web.Trace) (x : Float), t.valueAt x = Option.map (fun x => x.y) (Inkproof.Web.Nearest.find Inkproof.Web.Metric.x #[{ name := t.name, color := t.color, xs := t.xs, ys := t.ys }] x 0)
+theorem Inkproof.Web.Trace.valueAt_none_iff : ∀ (t : Inkproof.Web.Trace) (x : Float), t.valueAt x = Option.none ↔ Inkproof.Web.Nearest.candidates #[{ name := t.name, color := t.color, xs := t.xs, ys := t.ys }] = []
+field Inkproof.Web.Trace.xs : Inkproof.Web.Trace → Array Float
+field Inkproof.Web.Trace.ys : Inkproof.Web.Trace → Array Float
 def Inkproof.Web.View.ofBounds : Float → Float → Float → Float → Inkproof.Viewport.View Float
 theorem Inkproof.Web.View.ofBounds_x : ∀ (xStart xEnd yStart yEnd : Float), (Inkproof.Web.View.ofBounds xStart xEnd yStart yEnd).x = { start := xStart, span := xEnd - xStart }
 theorem Inkproof.Web.View.ofBounds_y : ∀ (xStart xEnd yStart yEnd : Float), (Inkproof.Web.View.ofBounds xStart xEnd yStart yEnd).y = { start := yStart, span := yEnd - yStart }
@@ -224,6 +285,7 @@ instance Inkproof.Web.instDecidableEqDragMode : DecidableEq Inkproof.Web.DragMod
 instance Inkproof.Web.instDecidableEqFrame : DecidableEq Inkproof.Web.Frame
 def Inkproof.Web.instDecidableEqFrame.decEq : (x x_1 : Inkproof.Web.Frame) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqLevel : DecidableEq Inkproof.Web.Level
+instance Inkproof.Web.instDecidableEqMetric : DecidableEq Inkproof.Web.Metric
 instance Inkproof.Web.instDecidableEqSelectMode : DecidableEq Inkproof.Web.SelectMode
 instance Inkproof.Web.instDecidableEqSize : DecidableEq Inkproof.Web.Size
 def Inkproof.Web.instDecidableEqSize.decEq : (x x_1 : Inkproof.Web.Size) → Decidable (x = x_1)

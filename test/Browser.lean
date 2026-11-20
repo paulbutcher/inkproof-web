@@ -37,7 +37,10 @@ def accessibleScene (src : String) : Async Scene := do
   return { scene with access :=
     { name := "Sales", series := #["North", "South"], points := 5, view := some ⟨axis, { axis with length := 200 }⟩,
       header := #["Month", "North", "South"],
-      rows := #[#["Jan", "1", "2"], #["Feb", "3", "4"]] } }
+      rows := #[#["Jan", "1", "2"], #["Feb", "3", "4"]],
+      traces := #[
+        { name := "North", color := "#d33", xs := #[0, 25, 50, 75, 100], ys := #[10, 30, 20, 60, 40] },
+        { name := "South", color := "#36c", xs := #[0, 25, 50, 75, 100], ys := #[80, 70, 90, 50, 55] }] } }
 
 /-- The same chart with its plot inset by 60 pixels from the left and 20 from the top, in an element large enough to hold it. -/
 def insetScene (src : String) : Async Scene := do

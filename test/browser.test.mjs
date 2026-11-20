@@ -692,3 +692,34 @@ test('a chart that builds from its scene cache uploads once, again after the dat
   assert.deepEqual(await page.evaluate(() => window.errors), []);
   await context.close();
 });
+
+test('the tooltip names the nearest visible point and the legend gives each series value at the cursor', async () => {
+  const { page, context } = await open('/probe.html');
+  await drawn(page, 1);
+  await page.evaluate(() => {
+    window.toggled = [];
+    document.getElementById('a').addEventListener('inkproof-series', e => window.toggled.push(e.detail));
+  });
+  const move = y => page.evaluate(y => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: rect.left + 100, clientY: rect.top + y }));
+  }, y);
+  const text = sel => page.evaluate(sel => document.getElementById('a').shadowRoot.querySelector(sel).textContent, sel);
+  const legend = () => page.evaluate(() =>
+    [...document.getElementById('a').shadowRoot.querySelectorAll('.legend button')].map(b => b.textContent));
+  assert.deepEqual(await legend(), ['North: -', 'South: -'], 'with no cursor there are no values');
+  await move(130);
+  assert.deepEqual(await legend(), ['North: 30', 'South: 70'], 'each value is the series at the cursor x');
+  assert.equal(await text('.tip'), 'North: 25, 30');
+  await move(40);
+  assert.equal(await text('.tip'), 'South: 25, 70', 'the nearest point changes with the pointer');
+  await page.evaluate(() => document.getElementById('a').shadowRoot.querySelector('.legend button').click());
+  assert.deepEqual(await page.evaluate(() => window.toggled), [{ series: 0, hidden: true }]);
+  await move(130);
+  assert.equal(await text('.tip'), 'South: 25, 70', 'a hidden series has no nearest point');
+  assert.equal(await page.evaluate(() =>
+    document.getElementById('a').shadowRoot.querySelector('.legend button').getAttribute('aria-pressed')), 'false');
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});

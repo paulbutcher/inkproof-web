@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.14.0]
+
+- The `tooltip` attribute shows the series and values of the visible point nearest the pointer, and the `legend` attribute lists the series with their value at the cursor's x and a click to hide or show each, reported as `inkproof-series`; `Nearest.find` (proved least), `Legend.rows`, `Legend.toggle`, `Trace` and `Access.traces` are the pure parts.
+
 ## [0.13.0]
 
 - `SceneState` and `SceneCache` keep a chart's GPU cache across frames, discard it when the context is lost, number buffers per chart, and let a page invalidate it when its data changes.
