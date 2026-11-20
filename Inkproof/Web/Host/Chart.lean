@@ -14,6 +14,7 @@ import Inkproof.Web.Attr
 import Inkproof.Web.Access
 import Inkproof.Web.Pointer
 import Inkproof.Web.Box
+import Inkproof.Web.Cursor
 import Inkproof.Web.Group
 import Inkproof.Web.Host.Console
 import Inkproof.Web.Host.Gpu
@@ -114,6 +115,9 @@ private structure Chart where
   boxConfig : IO.Ref BoxConfig
   group : IO.Ref (Option String)
   dragMode : IO.Ref DragMode
+  cursorMode : IO.Ref CursorMode
+  /-- The data position of the cursor, with the y position when the pointer is over this chart. -/
+  cursor : IO.Ref (Option (Float × Option Float))
   frame : IO.Ref Frame
   scheduled : IO.Ref Bool
   alive : IO.Ref Bool
@@ -216,6 +220,16 @@ private def draw (c : Chart) : IO Unit := do
     c.ctx.callMethod "rotate" #[toJS label.rotation] Unit
     c.ctx.callMethod "fillText" #[toJS label.text, toJS 0, toJS 0] Unit
     c.ctx.callMethod "restore" #[] Unit
+  if let (some (x, y), some config) := (← c.cursor.get, scene.access.view) then
+    let view := ((← c.nav.get).map (·.view)).getD (View.home config)
+    c.ctx.set "strokeStyle" "rgba(0, 0, 0, 0.5)"
+    c.ctx.set "lineWidth" 1
+    let origin := scene.access.plotOrigin
+    for l in Cursor.lines (← c.cursorMode.get) config view x y do
+      c.ctx.callMethod "beginPath" #[] Unit
+      c.ctx.callMethod "moveTo" #[toJS (origin.1 + l.x₁), toJS (origin.2 + l.y₁)] Unit
+      c.ctx.callMethod "lineTo" #[toJS (origin.1 + l.x₂), toJS (origin.2 + l.y₂)] Unit
+      c.ctx.callMethod "stroke" #[] Unit
   dispatch c.el "inkproof-draw" (obj [("width", toJS size.width), ("height", toJS size.height)])
 
 private def onFrame (c : Chart) : IO Unit := do
@@ -299,7 +313,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan
+    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none
@@ -367,6 +381,23 @@ private def followFrom (origin : Chart) (view : View Float) : IO Unit := do
       log .debug "chart followed its group" [("group", name), ("chart", toString c.id)]
       announceView c scene next
 
+/-- Put the cursor at `pos`, or take it away, and redraw if that changed it. -/
+private def moveCursor (c : Chart) (pos : Option (Float × Option Float)) : IO Unit := do
+  let old ← c.cursor.get
+  let same := match old, pos with
+    | none, none => true
+    | some (x₁, y₁), some (x₂, y₂) => x₁ == x₂ && y₁ == y₂
+    | _, _ => false
+  unless same do
+    c.cursor.set pos
+    if (← c.cursorMode.get) != .off then invalidate c
+
+/-- Show the cursor at x position `x` on every other chart in `origin`'s group, which share the axis, or take it from them. -/
+private def shareCursor (origin : Chart) (x : Option Float) : IO Unit := do
+  let some name ← origin.group.get | return
+  for (c, _, _) in ← peers name do
+    if c.id != origin.id then moveCursor c (x.map (·, none))
+
 /-- Make `next` the chart's state, telling the application and assistive technology of what changed from `nav`, and the chart's group of a new x range. -/
 private def commit (c : Chart) (scene : Scene) (nav next : Nav) : IO Unit := do
   c.nav.set (some next)
@@ -425,6 +456,12 @@ private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
   let boxes := (← c.dragMode.get).boxes (← event.get "shiftKey" Bool)
   c.boxStart.set (if (← c.pointers.get).size == 1 && boxes then some p else none)
 
+private def clearCursor (c : Chart) : IO Unit := do
+  moveCursor c none
+  shareCursor c none
+
+private def onPointerLeave (c : Chart) (_ : Value) : IO Unit := clearCursor c
+
 private def onPointerMove (c : Chart) (event : Value) : IO Unit := do
   let some (_, navConfig, nav) ← navigable c | return
   let id ← event.get "pointerId" Nat
@@ -447,6 +484,10 @@ private def onPointerMove (c : Chart) (event : Value) : IO Unit := do
     let v := Gesture.toView navConfig.view p
     let d := View.cursor navConfig.view ((← c.nav.get).getD nav).view v.1 v.2
     dispatch c.el "inkproof-pointer" (obj [("x", toJS d.1), ("y", toJS d.2)])
+    moveCursor c (some (d.1, some d.2))
+    shareCursor c (some d.1)
+  else
+    clearCursor c
 
 private def onPointerUp (c : Chart) (event : Value) : IO Unit := do
   let id ← event.get "pointerId" Nat
@@ -469,9 +510,12 @@ private def load (c : Chart) (loader : String → Async Scene) : Async Unit := d
   let boxMin ← getAttr c.el "box-min"
   let drag ← getAttr c.el "drag"
   let groupName ← getAttr c.el "group"
-  match ChartAttrs.parse src level, BoxConfig.parse boxAxes boxMin, DragMode.parse drag, Group.parse groupName with
-  | .error message, _, _, _ | _, .error message, _, _ | _, _, .error message, _ | _, _, _, .error message => fail c message []
-  | .ok attrs, .ok box, .ok mode, .ok group =>
+  let cursorName ← getAttr c.el "cursor"
+  match ChartAttrs.parse src level, BoxConfig.parse boxAxes boxMin, DragMode.parse drag, Group.parse groupName, CursorMode.parse cursorName with
+  | .error message, _, _, _, _ | _, .error message, _, _, _ | _, _, .error message, _, _ | _, _, _, .error message, _
+  | _, _, _, _, .error message => fail c message []
+  | .ok attrs, .ok box, .ok mode, .ok group, .ok cursor =>
+    c.cursorMode.set cursor
     c.boxConfig.set box
     c.dragMode.set mode
     c.group.set group
@@ -507,6 +551,12 @@ def setScene (el : Value) (scene : Scene) : IO Unit := do
   describe c scene.access
   invalidate c
 
+/-- Put the chart's cursor at x position `x` in data coordinates, or take it away, as the pointer over a chart outside its group would. -/
+def setCursor (el : Value) (x : Option Float) : IO Unit := do
+  let some c ← chartOfElement el | return
+  unless (← c.alive.get) do return
+  moveCursor c (x.map (·, none))
+
 /-- Apply `command` to the chart as the key for it would, telling the application of what changed. -/
 def apply (el : Value) (command : Command) : IO Unit := do
   let some c ← chartOfElement el | return
@@ -524,7 +574,7 @@ private def connect (loader : String → Async Scene) (args : Array Data) : Asyn
   el.set idKey id
   live.modify (·.insert id c)
   for (name, handler) in [("keydown", onKey c), ("wheel", onWheel c), ("pointerdown", onPointerDown c),
-      ("pointermove", onPointerMove c), ("pointerup", onPointerUp c), ("pointercancel", onPointerUp c)] do
+      ("pointermove", onPointerMove c), ("pointerleave", onPointerLeave c), ("pointerup", onPointerUp c), ("pointercancel", onPointerUp c)] do
     let listener ← Function.ofSyncFn fun args => do
       if let some (Data.ref event _) := args[0]? then handler event
       return .undefined
@@ -566,18 +616,27 @@ private def regroup (c : Chart) (value : Option String) : IO Unit := do
     c.group.set group
     joinGroup c
 
+/-- A change of `cursor` redraws the chart without reloading it. -/
+private def recursor (c : Chart) (value : Option String) : IO Unit := do
+  match CursorMode.parse value with
+  | .error message => fail c message []
+  | .ok mode =>
+    c.cursorMode.set mode
+    invalidate c
+
 private def changed (loader : String → Async Scene) (args : Array Data) : Async Unit := do
   if let some c ← chartOf args then
     if (← c.alive.get) then
       match args[1]? with
       | some (.string "group") => regroup c (← getAttr c.el "group")
+      | some (.string "cursor") => recursor c (← getAttr c.el "cursor")
       | _ => load c loader
 
 /-- Define the custom element `tag`: it draws the scene `loader` makes of its `src` attribute. -/
 def register (tag : String) (loader : String → Async Scene := fetchScene) : IO Unit := do
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group"]
+  defineElement tag #["src", "log-level", "group", "cursor"]
     (← Function.ofFn (connect loader · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))

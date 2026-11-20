@@ -43,6 +43,26 @@ theorem Inkproof.Web.Command.ofKey_tab : ∀ (shift : Bool), Inkproof.Web.Comman
 constructor Inkproof.Web.Command.previousSeries : Inkproof.Web.Command
 constructor Inkproof.Web.Command.reset : Inkproof.Web.Command
 constructor Inkproof.Web.Command.view : Inkproof.Viewport.Key → Inkproof.Web.Command
+def Inkproof.Web.Cursor.lines : Inkproof.Web.CursorMode → Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Float → Option Float → Array Inkproof.Web.Line
+theorem Inkproof.Web.Cursor.lines_horizontal : ∀ (mode : Inkproof.Web.CursorMode) (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (x y : Float), mode.showsY = Bool.true → ¬mode.showsX = Bool.true → 0 ≤ config.y.length - Inkproof.Viewport.Interval.toScreen config.y view.y y → config.y.length - Inkproof.Viewport.Interval.toScreen config.y view.y y ≤ config.y.length → Inkproof.Web.Cursor.lines mode config view x (Option.some y) = #[{ x₁ := 0, y₁ := config.y.length - Inkproof.Viewport.Interval.toScreen config.y view.y y, x₂ := config.x.length, y₂ := config.y.length - Inkproof.Viewport.Interval.toScreen config.y view.y y }]
+theorem Inkproof.Web.Cursor.lines_off : ∀ (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (x : Float) (y : Option Float), Inkproof.Web.Cursor.lines Inkproof.Web.CursorMode.off config view x y = #[]
+theorem Inkproof.Web.Cursor.lines_vertical : ∀ (mode : Inkproof.Web.CursorMode) (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (x : Float), mode.showsX = Bool.true → 0 ≤ Inkproof.Viewport.Interval.toScreen config.x view.x x → Inkproof.Viewport.Interval.toScreen config.x view.x x ≤ config.x.length → Inkproof.Web.Cursor.lines mode config view x Option.none = #[{ x₁ := Inkproof.Viewport.Interval.toScreen config.x view.x x, y₁ := 0, x₂ := Inkproof.Viewport.Interval.toScreen config.x view.x x, y₂ := config.y.length }]
+theorem Inkproof.Web.Cursor.lines_x_only : ∀ (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (x y : Float), Inkproof.Web.Cursor.lines Inkproof.Web.CursorMode.x config view x (Option.some y) = Inkproof.Web.Cursor.lines Inkproof.Web.CursorMode.x config view x Option.none
+inductive Inkproof.Web.CursorMode : Type
+def Inkproof.Web.CursorMode.ofNat : Nat → Inkproof.Web.CursorMode
+theorem Inkproof.Web.CursorMode.ofNat_ctorIdx : ∀ (x : Inkproof.Web.CursorMode), Inkproof.Web.CursorMode.ofNat x.ctorIdx = x
+constructor Inkproof.Web.CursorMode.off : Inkproof.Web.CursorMode
+def Inkproof.Web.CursorMode.parse : Option String → Except String Inkproof.Web.CursorMode
+theorem Inkproof.Web.CursorMode.parse_invalid : ∀ (s : String), s ≠ "off" ∧ s ≠ "x" ∧ s ≠ "y" ∧ s ≠ "xy" → ∃ e, Inkproof.Web.CursorMode.parse (Option.some s) = Except.error e
+theorem Inkproof.Web.CursorMode.parse_none : Inkproof.Web.CursorMode.parse Option.none = Except.ok Inkproof.Web.CursorMode.off
+theorem Inkproof.Web.CursorMode.parse_xy : Inkproof.Web.CursorMode.parse (Option.some "xy") = Except.ok Inkproof.Web.CursorMode.xy
+def Inkproof.Web.CursorMode.showsX : Inkproof.Web.CursorMode → Bool
+theorem Inkproof.Web.CursorMode.showsX_iff : ∀ (m : Inkproof.Web.CursorMode), m.showsX = Bool.true ↔ m = Inkproof.Web.CursorMode.x ∨ m = Inkproof.Web.CursorMode.xy
+def Inkproof.Web.CursorMode.showsY : Inkproof.Web.CursorMode → Bool
+theorem Inkproof.Web.CursorMode.showsY_iff : ∀ (m : Inkproof.Web.CursorMode), m.showsY = Bool.true ↔ m = Inkproof.Web.CursorMode.y ∨ m = Inkproof.Web.CursorMode.xy
+constructor Inkproof.Web.CursorMode.x : Inkproof.Web.CursorMode
+constructor Inkproof.Web.CursorMode.xy : Inkproof.Web.CursorMode
+constructor Inkproof.Web.CursorMode.y : Inkproof.Web.CursorMode
 inductive Inkproof.Web.DragMode : Type
 constructor Inkproof.Web.DragMode.box : Inkproof.Web.DragMode
 def Inkproof.Web.DragMode.boxes : Inkproof.Web.DragMode → Bool → Bool
@@ -87,6 +107,12 @@ theorem Inkproof.Web.Level.parse?_none : ∀ {s : String}, ¬s ∈ ["debug", "in
 def Inkproof.Web.Level.rank : Inkproof.Web.Level → Nat
 constructor Inkproof.Web.Level.warn : Inkproof.Web.Level
 theorem Inkproof.Web.Level.warn_enabled_by_default : Inkproof.Web.Level.warn.enabled Inkproof.Web.Level.defaultThreshold = Bool.true
+structure Inkproof.Web.Line : Type
+constructor Inkproof.Web.Line.mk : Float → Float → Float → Float → Inkproof.Web.Line
+field Inkproof.Web.Line.x₁ : Inkproof.Web.Line → Float
+field Inkproof.Web.Line.x₂ : Inkproof.Web.Line → Float
+field Inkproof.Web.Line.y₁ : Inkproof.Web.Line → Float
+field Inkproof.Web.Line.y₂ : Inkproof.Web.Line → Float
 def Inkproof.Web.Milli : Type
 structure Inkproof.Web.Nav : Type
 def Inkproof.Web.Nav.apply : Inkproof.Web.NavConfig → Inkproof.Web.Nav → Inkproof.Web.Command → Inkproof.Web.Nav
@@ -150,6 +176,7 @@ instance Inkproof.Web.instDecidableEqChartAttrs : DecidableEq Inkproof.Web.Chart
 def Inkproof.Web.instDecidableEqChartAttrs.decEq : (x x_1 : Inkproof.Web.ChartAttrs) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqCommand : DecidableEq Inkproof.Web.Command
 def Inkproof.Web.instDecidableEqCommand.decEq : (x x_1 : Inkproof.Web.Command) → Decidable (x = x_1)
+instance Inkproof.Web.instDecidableEqCursorMode : DecidableEq Inkproof.Web.CursorMode
 instance Inkproof.Web.instDecidableEqDragMode : DecidableEq Inkproof.Web.DragMode
 instance Inkproof.Web.instDecidableEqFrame : DecidableEq Inkproof.Web.Frame
 def Inkproof.Web.instDecidableEqFrame.decEq : (x x_1 : Inkproof.Web.Frame) → Decidable (x = x_1)

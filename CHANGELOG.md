@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.12.0]
+
+- The `cursor` attribute draws lines at the data position under the pointer, shown on the other charts of the group too; `CursorMode` and `Cursor.lines` are the pure parts.
+
 ## [0.11.0]
 
 - The `group` attribute links chart elements: those with the same name follow one another's x range from pointer and key input, and one that drops or changes the attribute stops following.

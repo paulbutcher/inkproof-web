@@ -563,3 +563,27 @@ test('charts in one group follow each other in x, and one that leaves stops foll
   assert.equal(joined.xStart, now.xStart, 'relinking takes the group x range');
   await context.close();
 });
+
+test('a cursor follows the pointer and shows on the other charts of its group', async () => {
+  const { page, context } = await open('/cursor.html');
+  await drawn(page, 2);
+  const read = id => page.evaluate(id => {
+    const canvas = document.getElementById(id).shadowRoot.querySelector('canvas');
+    return [...canvas.getContext('2d').getImageData(100, 5, 1, 1).data];
+  }, id);
+  const point = (id, type) => page.evaluate(([id, type]) => {
+    const el = document.getElementById(id);
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent(type, { pointerId: 1, clientX: rect.left + 100, clientY: rect.top + 100 }));
+  }, [id, type]);
+  const before = { a: await read('a'), b: await read('b') };
+  await point('a', 'pointermove');
+  await settle(page);
+  assert.notDeepEqual(await read('a'), before.a, 'the chart under the pointer draws the cursor');
+  assert.notDeepEqual(await read('b'), before.b, 'the other chart in the group draws it too');
+  await point('a', 'pointerleave');
+  await settle(page);
+  assert.deepEqual(await read('b'), before.b, 'leaving takes the cursor away');
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});

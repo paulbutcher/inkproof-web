@@ -26,6 +26,7 @@ Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser
 - Zoom, pan and box-zoom a chart with the wheel, a drag, shift-drag or a two-finger pinch, and learn the data position under the pointer from the `inkproof-pointer` event: `Nav.input`, with the conversions from Viewport's `Gesture`; a plot inset in the element, for axis labels beside it, is placed by `Access.plotOrigin`.
 - Choose which axes a shift-drag box zooms (x, y, both or the dominant direction of the drag) and the least drag that counts, by the `box-zoom` and `box-min` attributes: `BoxConfig`, `BoxConfig.input`, `BoxConfig.parse`; with `drag="box"` a plain drag draws the box and shift-drag pans: `DragMode`.
 - Link chart elements so that zooming, panning or box-zooming one moves the x range of the others, with only a `group` attribute naming the group: `Group.parse`.
+- Draw a cursor line at the data position under the pointer, vertical, horizontal or both, shown on the other charts of the group too, or set from the page: the `cursor` attribute, `CursorMode`, `Cursor.lines`, `Host.setCursor`.
 - Describe a chart for assistive technology, with a name, a summary, a cursor reading and a data table: `Access`, `Access.summaryText`, `Access.cursorText`.
 - Format numbers and lines of text for those descriptions: `showFloat`, `formatLine`, `describe`.
 - Fetch a tile, or a byte range of a file, with the status checked and a failure logged: `Host.fetchTile`.
