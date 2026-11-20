@@ -18,9 +18,9 @@ class Reader {
   done() { return this.p === this.v.byteLength; }
 }
 
-const VERTEX_SOURCE = "#version 300 es\n// Copyright (c) 2026 Paul Butcher. All rights reserved.\n// Released under Apache 2.0 license as described in the file LICENSE.\n// Generated from Inkproof.Gpu.Shader. Do not edit.\nprecision highp float;\nin vec2 a_position;\nin vec2 a_dir;\nin vec2 a_corner;\nuniform vec2 u_slope;\nuniform vec2 u_offset;\nuniform float u_size;\nuniform vec4 u_view;\nvoid main() {\n  vec2 p = ((a_position * u_slope) + u_offset);\n  vec2 d = ((a_dir * u_slope) * vec2(u_view.x, u_view.y));\n  float r = inversesqrt(((d.x * d.x) + (d.y * d.y)));\n  vec2 t = (d * r);\n  vec2 n = vec2((0.0 - t.y), t.x);\n  vec2 o = (((t * a_corner.x) + (n * a_corner.y)) * u_size);\n  gl_Position = vec4((p.x + (o.x * u_view.z)), (p.y + (o.y * u_view.w)), 0.0, 1.0);\n}\n";
-const FRAGMENT_SOURCE = "#version 300 es\n// Copyright (c) 2026 Paul Butcher. All rights reserved.\n// Released under Apache 2.0 license as described in the file LICENSE.\n// Generated from Inkproof.Gpu.Shader. Do not edit.\nprecision highp float;\nuniform vec4 u_colour;\nout vec4 o_colour;\nvoid main() {\n  o_colour = u_colour;\n}\n";
-const UNIFORM_NAMES = ["u_slope", "u_offset", "u_size", "u_view", "u_colour"];
+const VERTEX_SOURCE = "#version 300 es\n// Copyright (c) 2026 Paul Butcher. All rights reserved.\n// Released under Apache 2.0 license as described in the file LICENSE.\n// Generated from Inkproof.Gpu.Shader. Do not edit.\nprecision highp float;\nin vec2 a_position;\nin vec2 a_dir;\nin vec2 a_corner;\nuniform vec2 u_slope;\nuniform vec2 u_offset;\nuniform float u_size;\nuniform vec4 u_view;\nout vec2 v_pos;\nvoid main() {\n  vec2 p = ((a_position * u_slope) + u_offset);\n  vec2 d = ((a_dir * u_slope) * vec2(u_view.x, u_view.y));\n  float r = inversesqrt(((d.x * d.x) + (d.y * d.y)));\n  vec2 t = (d * r);\n  vec2 n = vec2((0.0 - t.y), t.x);\n  vec2 o = (((t * a_corner.x) + (n * a_corner.y)) * u_size);\n  gl_Position = vec4((p.x + (o.x * u_view.z)), (p.y + (o.y * u_view.w)), 0.0, 1.0);\n  v_pos = a_position;\n}\n";
+const FRAGMENT_SOURCE = "#version 300 es\n// Copyright (c) 2026 Paul Butcher. All rights reserved.\n// Released under Apache 2.0 license as described in the file LICENSE.\n// Generated from Inkproof.Gpu.Shader. Do not edit.\nprecision highp float;\nin vec2 v_pos;\nuniform vec4 u_colour;\nuniform vec2 u_axis;\nuniform vec4 u_start;\nuniform vec4 u_inv;\nuniform vec4 u_delta0;\nuniform vec4 u_delta1;\nuniform vec4 u_delta2;\nuniform vec4 u_delta3;\nout vec4 o_colour;\nvoid main() {\n  float t = ((v_pos.x * u_axis.x) + (v_pos.y * u_axis.y));\n  float w0 = clamp(((t - u_start.x) * u_inv.x), 0.0, 1.0);\n  float w1 = clamp(((t - u_start.y) * u_inv.y), 0.0, 1.0);\n  float w2 = clamp(((t - u_start.z) * u_inv.z), 0.0, 1.0);\n  float w3 = clamp(((t - u_start.w) * u_inv.w), 0.0, 1.0);\n  vec4 c = ((((u_colour + (u_delta0 * w0)) + (u_delta1 * w1)) + (u_delta2 * w2)) + (u_delta3 * w3));\n  o_colour = vec4((c.x * c.w), (c.y * c.w), (c.z * c.w), c.w);\n}\n";
+const UNIFORM_NAMES = ["u_slope", "u_offset", "u_size", "u_view", "u_colour", "u_axis", "u_start", "u_inv", "u_delta0", "u_delta1", "u_delta2", "u_delta3"];
 
 function compile(gl, type, source) {
   const shader = gl.createShader(type);
@@ -105,6 +105,8 @@ export function run(gl, s, bytes) {
     case 3: {
       s.current = s.programs.get(a[0]);
       gl.useProgram(s.current.program);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       break;
     }
     case 4: {
@@ -125,8 +127,9 @@ export function run(gl, s, bytes) {
       break;
     }
     case 6: {
-      gl.clearColor((a[0] >>> 24) / 255, ((a[0] >>> 16) & 255) / 255,
-        ((a[0] >>> 8) & 255) / 255, (a[0] & 255) / 255);
+      const ca = (a[0] & 255) / 255;
+      gl.clearColor((a[0] >>> 24) / 255 * ca, ((a[0] >>> 16) & 255) / 255 * ca,
+        ((a[0] >>> 8) & 255) / 255 * ca, ca);
       gl.clear(gl.COLOR_BUFFER_BIT);
       break;
     }
