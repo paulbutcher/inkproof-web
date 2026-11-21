@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.16.0]
+
+- `legend="bottom"` puts the legend below the plot, outside it.
+- `Host.registerSized` gives the loader the chart's CSS size and calls it again once the size settles after a resize.
+
 ## [0.15.1]
 
 - The generated interpreter comes from Gpu v0.13.0, so a gradient fill or stroke is drawn blended between its stops.
