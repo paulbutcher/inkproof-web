@@ -159,37 +159,93 @@ inductive Placement where
   | below
   deriving DecidableEq, Repr
 
-/-- Validate the raw `legend` attribute: present (empty or `on`) overlays the plot, `bottom` goes below it, a missing one or `off` shows none. -/
-def parsePlacement : Option String → Except String (Option Placement)
+/-- A legend's placement, and whether its entries show values (`live`) or only each series' colour and name. -/
+structure Style where
+  placement : Placement
+  live : Bool
+  deriving DecidableEq, Repr
+
+/-- Validate the raw `legend` attribute: a missing one or `off` shows none; `on` (or empty) overlays the plot, `bottom` goes below it and `static` leaves out the values, and `static` combines with either placement, as `static bottom`. -/
+def parseStyle : Option String → Except String (Option Style)
   | none | some "off" => .ok none
-  | some "" | some "on" => .ok (some .overlay)
-  | some "bottom" => .ok (some .below)
-  | some s => .error s!"attribute legend is \"{s}\", expected on, bottom or off"
+  | some "" | some "on" => .ok (some { placement := .overlay, live := true })
+  | some "bottom" => .ok (some { placement := .below, live := true })
+  | some "static" | some "on static" | some "static on" => .ok (some { placement := .overlay, live := false })
+  | some "static bottom" | some "bottom static" => .ok (some { placement := .below, live := false })
+  | some s => .error s!"attribute legend is \"{s}\", expected on, bottom, static, static bottom or off"
 
-theorem parsePlacement_bottom : parsePlacement (some "bottom") = .ok (some .below) := rfl
+theorem parseStyle_none : parseStyle none = .ok none := rfl
 
-theorem parsePlacement_none : parsePlacement none = .ok none := rfl
+theorem parseStyle_off : parseStyle (some "off") = .ok none := rfl
 
-theorem parsePlacement_empty : parsePlacement (some "") = .ok (some .overlay) := rfl
+theorem parseStyle_empty : parseStyle (some "") = .ok (some { placement := .overlay, live := true }) := by
+  rfl
 
-theorem parsePlacement_on : parsePlacement (some "on") = .ok (some .overlay) := rfl
+theorem parseStyle_on : parseStyle (some "on") = .ok (some { placement := .overlay, live := true }) := by
+  rfl
 
-theorem parsePlacement_off : parsePlacement (some "off") = .ok none := rfl
+theorem parseStyle_bottom : parseStyle (some "bottom") = .ok (some { placement := .below, live := true }) := by
+  rfl
 
-theorem parsePlacement_other (s : String) (h1 : s ≠ "") (h2 : s ≠ "on") (h3 : s ≠ "off") (h4 : s ≠ "bottom") :
-    parsePlacement (some s) = .error s!"attribute legend is \"{s}\", expected on, bottom or off" := by
-  unfold parsePlacement
+theorem parseStyle_static : parseStyle (some "static") = .ok (some { placement := .overlay, live := false }) := by
+  rfl
+
+theorem parseStyle_static_bottom :
+    parseStyle (some "static bottom") = .ok (some { placement := .below, live := false }) := by
+  rfl
+
+theorem parseStyle_on_static :
+    parseStyle (some "on static") = .ok (some { placement := .overlay, live := false }) := by
+  rfl
+
+theorem parseStyle_static_on :
+    parseStyle (some "static on") = .ok (some { placement := .overlay, live := false }) := by
+  rfl
+
+theorem parseStyle_bottom_static :
+    parseStyle (some "bottom static") = .ok (some { placement := .below, live := false }) := by
+  rfl
+
+theorem parseStyle_other (s : String) (h1 : s ≠ "") (h2 : s ≠ "on") (h3 : s ≠ "off") (h4 : s ≠ "bottom")
+    (h5 : s ≠ "static") (h6 : s ≠ "on static") (h7 : s ≠ "static on") (h8 : s ≠ "static bottom")
+    (h9 : s ≠ "bottom static") :
+    parseStyle (some s) = .error s!"attribute legend is \"{s}\", expected on, bottom, static, static bottom or off" := by
+  unfold parseStyle
   split <;> simp_all
 
 /-- Whether the raw `legend` attribute shows a legend. -/
 def parse (raw : Option String) : Except String Bool :=
-  (parsePlacement raw).map (·.isSome)
+  (parseStyle raw).map (·.isSome)
 
 theorem parse_none : parse none = .ok false := rfl
 
-theorem parse_empty : parse (some "") = .ok true := rfl
+theorem parse_empty : parse (some "") = .ok true := by
+  rfl
 
-theorem parse_bottom : parse (some "bottom") = .ok true := rfl
+theorem parse_bottom : parse (some "bottom") = .ok true := by
+  rfl
+
+/-- Whether the raw `legend` attribute asks for the values: false for `static`, and for no legend. -/
+def live (raw : Option String) : Bool :=
+  match parseStyle raw with
+  | .ok (some s) => s.live
+  | _ => false
+
+theorem live_of_style (raw : Option String) (s : Style) (h : parseStyle raw = .ok (some s)) :
+    live raw = s.live := by
+  simp [live, h]
+
+theorem live_of_none (raw : Option String) (h : parseStyle raw = .ok none) : live raw = false := by
+  simp [live, h]
+
+theorem live_of_error (raw : Option String) (e : String) (h : parseStyle raw = .error e) : live raw = false := by
+  simp [live, h]
+
+theorem live_static : live (some "static bottom") = false := by
+  rfl
+
+theorem live_on : live (some "on") = true := by
+  rfl
 
 /-- What a tooltip at `c` reads: the series and the point's position, from the traces `c` was found in. -/
 def tooltip (traces : Array Trace) (c : Candidate) : Option String := do

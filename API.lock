@@ -103,17 +103,36 @@ inductive Inkproof.Web.Legend.Placement : Type
 def Inkproof.Web.Legend.Placement.ofNat : Nat → Inkproof.Web.Legend.Placement
 theorem Inkproof.Web.Legend.Placement.ofNat_ctorIdx : ∀ (x : Inkproof.Web.Legend.Placement), Inkproof.Web.Legend.Placement.ofNat x.ctorIdx = x
 constructor Inkproof.Web.Legend.Placement.overlay : Inkproof.Web.Legend.Placement
+structure Inkproof.Web.Legend.Style : Type
+field Inkproof.Web.Legend.Style.live : Inkproof.Web.Legend.Style → Bool
+constructor Inkproof.Web.Legend.Style.mk : Inkproof.Web.Legend.Placement → Bool → Inkproof.Web.Legend.Style
+field Inkproof.Web.Legend.Style.placement : Inkproof.Web.Legend.Style → Inkproof.Web.Legend.Placement
 instance Inkproof.Web.Legend.instDecidableEqPlacement : DecidableEq Inkproof.Web.Legend.Placement
+instance Inkproof.Web.Legend.instDecidableEqStyle : DecidableEq Inkproof.Web.Legend.Style
+def Inkproof.Web.Legend.instDecidableEqStyle.decEq : (x x_1 : Inkproof.Web.Legend.Style) → Decidable (x = x_1)
 instance Inkproof.Web.Legend.instReprPlacement : Repr Inkproof.Web.Legend.Placement
 def Inkproof.Web.Legend.instReprPlacement.repr : Inkproof.Web.Legend.Placement → Nat → Std.Format
+instance Inkproof.Web.Legend.instReprStyle : Repr Inkproof.Web.Legend.Style
+def Inkproof.Web.Legend.instReprStyle.repr : Inkproof.Web.Legend.Style → Nat → Std.Format
+def Inkproof.Web.Legend.live : Option String → Bool
+theorem Inkproof.Web.Legend.live_of_error : ∀ (raw : Option String) (e : String), Inkproof.Web.Legend.parseStyle raw = Except.error e → Inkproof.Web.Legend.live raw = Bool.false
+theorem Inkproof.Web.Legend.live_of_none : ∀ (raw : Option String), Inkproof.Web.Legend.parseStyle raw = Except.ok Option.none → Inkproof.Web.Legend.live raw = Bool.false
+theorem Inkproof.Web.Legend.live_of_style : ∀ (raw : Option String) (s : Inkproof.Web.Legend.Style), Inkproof.Web.Legend.parseStyle raw = Except.ok (Option.some s) → Inkproof.Web.Legend.live raw = s.live
+theorem Inkproof.Web.Legend.live_on : Inkproof.Web.Legend.live (Option.some "on") = Bool.true
+theorem Inkproof.Web.Legend.live_static : Inkproof.Web.Legend.live (Option.some "static bottom") = Bool.false
 def Inkproof.Web.Legend.parse : Option String → Except String Bool
-def Inkproof.Web.Legend.parsePlacement : Option String → Except String (Option Inkproof.Web.Legend.Placement)
-theorem Inkproof.Web.Legend.parsePlacement_bottom : Inkproof.Web.Legend.parsePlacement (Option.some "bottom") = Except.ok (Option.some Inkproof.Web.Legend.Placement.below)
-theorem Inkproof.Web.Legend.parsePlacement_empty : Inkproof.Web.Legend.parsePlacement (Option.some "") = Except.ok (Option.some Inkproof.Web.Legend.Placement.overlay)
-theorem Inkproof.Web.Legend.parsePlacement_none : Inkproof.Web.Legend.parsePlacement Option.none = Except.ok Option.none
-theorem Inkproof.Web.Legend.parsePlacement_off : Inkproof.Web.Legend.parsePlacement (Option.some "off") = Except.ok Option.none
-theorem Inkproof.Web.Legend.parsePlacement_on : Inkproof.Web.Legend.parsePlacement (Option.some "on") = Except.ok (Option.some Inkproof.Web.Legend.Placement.overlay)
-theorem Inkproof.Web.Legend.parsePlacement_other : ∀ (s : String), s ≠ "" → s ≠ "on" → s ≠ "off" → s ≠ "bottom" → Inkproof.Web.Legend.parsePlacement (Option.some s) = Except.error (ToString.toString "attribute legend is \"" ++ ToString.toString s ++ ToString.toString "\", expected on, bottom or off")
+def Inkproof.Web.Legend.parseStyle : Option String → Except String (Option Inkproof.Web.Legend.Style)
+theorem Inkproof.Web.Legend.parseStyle_bottom : Inkproof.Web.Legend.parseStyle (Option.some "bottom") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.below, live := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_bottom_static : Inkproof.Web.Legend.parseStyle (Option.some "bottom static") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.below, live := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_empty : Inkproof.Web.Legend.parseStyle (Option.some "") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.overlay, live := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_none : Inkproof.Web.Legend.parseStyle Option.none = Except.ok Option.none
+theorem Inkproof.Web.Legend.parseStyle_off : Inkproof.Web.Legend.parseStyle (Option.some "off") = Except.ok Option.none
+theorem Inkproof.Web.Legend.parseStyle_on : Inkproof.Web.Legend.parseStyle (Option.some "on") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.overlay, live := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_on_static : Inkproof.Web.Legend.parseStyle (Option.some "on static") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.overlay, live := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_other : ∀ (s : String), s ≠ "" → s ≠ "on" → s ≠ "off" → s ≠ "bottom" → s ≠ "static" → s ≠ "on static" → s ≠ "static on" → s ≠ "static bottom" → s ≠ "bottom static" → Inkproof.Web.Legend.parseStyle (Option.some s) = Except.error (ToString.toString "attribute legend is \"" ++ ToString.toString s ++ ToString.toString "\", expected on, bottom, static, static bottom or off")
+theorem Inkproof.Web.Legend.parseStyle_static : Inkproof.Web.Legend.parseStyle (Option.some "static") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.overlay, live := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_static_bottom : Inkproof.Web.Legend.parseStyle (Option.some "static bottom") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.below, live := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_static_on : Inkproof.Web.Legend.parseStyle (Option.some "static on") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.overlay, live := Bool.false })
 theorem Inkproof.Web.Legend.parse_bottom : Inkproof.Web.Legend.parse (Option.some "bottom") = Except.ok Bool.true
 theorem Inkproof.Web.Legend.parse_empty : Inkproof.Web.Legend.parse (Option.some "") = Except.ok Bool.true
 theorem Inkproof.Web.Legend.parse_none : Inkproof.Web.Legend.parse Option.none = Except.ok Bool.false

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.17.0]
+
+- `legend="static"` (or `static bottom`) lists each series' colour and name with no values or readout, and still hides or shows a series on a click.
+
 ## [0.16.0]
 
 - `legend="bottom"` puts the legend below the plot, outside it.

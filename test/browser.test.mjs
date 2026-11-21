@@ -732,6 +732,31 @@ test('the tooltip names the nearest visible point and the legend gives each seri
   await context.close();
 });
 
+test('a static legend lists each series without values or readout, and still toggles', async () => {
+  const { page, context } = await open('/probe.html');
+  await drawn(page, 1);
+  await page.evaluate(() => {
+    window.toggled = [];
+    const el = document.getElementById('a');
+    el.addEventListener('inkproof-series', e => window.toggled.push(e.detail));
+    el.setAttribute('legend', 'static');
+  });
+  await page.evaluate(() => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: rect.left + 100, clientY: rect.top + 130 }));
+  });
+  const state = () => page.evaluate(() => {
+    const root = document.getElementById('a').shadowRoot;
+    return { names: [...root.querySelectorAll('.legend button')].map(b => b.textContent), readout: root.querySelector('.legend .readout') };
+  });
+  assert.deepEqual(await state(), { names: ['North', 'South'], readout: null });
+  await page.locator('#a .legend button').first().click();
+  assert.deepEqual(await page.evaluate(() => window.toggled), [{ series: 0, hidden: true }]);
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
 test('a sized chart makes its scene again for its new size and keeps its legend outside the plot', async () => {
   const { page, context } = await open('/sized.html');
   await drawn(page, 1);

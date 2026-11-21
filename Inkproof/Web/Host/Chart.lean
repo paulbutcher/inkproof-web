@@ -127,6 +127,8 @@ private structure Chart where
   cursorDotted : IO.Ref Bool
   tooltipMode : IO.Ref (Option Metric)
   legendOn : IO.Ref Bool
+  /-- Whether the legend shows values and the cursor readout, or only each series' colour and name. -/
+  legendLive : IO.Ref Bool
   /-- Which series the legend has hidden, by index. -/
   hidden : IO.Ref (Array Bool)
   selectMode : IO.Ref SelectMode
@@ -328,8 +330,8 @@ private def styles : String :=
   ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host{touch-action:none}" ++
   ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:nowrap;padding:2px 6px;background:#fff;border:1px solid #888;font:12px sans-serif}" ++
   ".legend{position:absolute;top:0;right:0;display:flex;flex-direction:column;font:12px sans-serif}.legend button{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit;cursor:pointer}" ++
-  ":host([legend=bottom]){display:flex;flex-direction:column}:host([legend=bottom]) canvas{flex:1 1 0;min-height:0;height:auto}" ++
-  ":host([legend=bottom]) .legend{position:static;flex:none;flex-direction:row;justify-content:flex-end;align-items:center;gap:12px;height:20px}" ++
+  ":host([legend~=bottom]){display:flex;flex-direction:column}:host([legend~=bottom]) canvas{flex:1 1 0;min-height:0;height:auto}" ++
+  ":host([legend~=bottom]) .legend{position:static;flex:none;flex-direction:row;justify-content:flex-end;align-items:center;gap:12px;height:20px}" ++
   ".legend .readout{text-align:right}.legend button[aria-pressed=false]{opacity:0.4}.swatch{display:inline-block;width:10px;height:10px}" ++
   ".hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}" ++
   ":host([show-table]) canvas{display:none}:host([show-table]) .hidden:not([aria-live]){position:static;width:100%;height:auto;overflow:auto;clip-path:none}"
@@ -371,7 +373,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipMode := ← IO.mkRef none, legendOn := ← IO.mkRef false, hidden := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipMode := ← IO.mkRef none, legendOn := ← IO.mkRef false, legendLive := ← IO.mkRef true, hidden := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -500,7 +502,8 @@ private def showLegend (c : Chart) (scene : Scene) : IO Unit := do
   let doc ← (← global).get "document"
   c.legendEl.callMethod "replaceChildren" #[] Unit
   unless (← c.legendOn.get) do return
-  let cursor ← c.cursor.get
+  let live ← c.legendLive.get
+  let cursor ← if live then c.cursor.get else pure none
   let cursorX := cursor.map (·.1)
   if let some (x, y) := cursor then
     let readout ← newElement doc "div"
@@ -516,7 +519,7 @@ private def showLegend (c : Chart) (scene : Scene) : IO Unit := do
     swatch.set "className" "swatch"
     (← swatch.get "style" Value).set "background" row.color
     let label ← newElement doc "span"
-    label.set "textContent" (Legend.text row)
+    label.set "textContent" (if live then Legend.text row else row.name)
     button.callMethod "append" #[toJS swatch, toJS label] Unit
     c.legendEl.callMethod "append" #[toJS button] Unit
 
@@ -700,6 +703,7 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
     | .ok tooltip, .ok legend =>
       c.tooltipMode.set tooltip
       c.legendOn.set legend
+      c.legendLive.set (Legend.live legendName)
     c.cursorMode.set cursor
     c.cursorDotted.set dotted.isSome
     c.selectMode.set select
@@ -895,6 +899,7 @@ private def reprobe (c : Chart) (tooltip legend : Option String) : IO Unit := do
   | .ok t, .ok l =>
     c.tooltipMode.set t
     c.legendOn.set l
+    c.legendLive.set (Legend.live legend)
     refreshProbe c
 
 /-- A change of `select` starts or stops the chart's selecting without reloading it; stopping drops its band. -/
