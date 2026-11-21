@@ -42,6 +42,16 @@ def accessibleScene (src : String) : Async Scene := do
         { name := "North", color := "#d33", xs := #[0, 25, 50, 75, 100], ys := #[10, 30, 20, 60, 40] },
         { name := "South", color := "#36c", xs := #[0, 25, 50, 75, 100], ys := #[80, 70, 90, 50, 55] }] } }
 
+/-- A scene with one series of 500001 points, over a view of 0 to 500000. -/
+def hugeScene (src : String) : Async Scene := do
+  let scene ← fetchScene src
+  let axis : Inkproof.Viewport.Interval.Config Float :=
+    { length := 400, minSpan := 1, maxSpan := 500000, home := ⟨0, 500000⟩, keyZoom := 2, keyPan := 0.25 }
+  let xs := (Array.range 500001).map Nat.toFloat
+  return { scene with access :=
+    { name := "Huge", series := #["Wave"], points := 500001, view := some ⟨axis, { axis with length := 200, home := ⟨0, 1⟩, maxSpan := 1 }⟩,
+      traces := #[{ name := "Wave", color := "#d33", xs, ys := xs.map fun x => (x - 7 * (x / 7).floor) / 7 }] } }
+
 /-- The same chart with its plot inset by 60 pixels from the left and 20 from the top, in an element large enough to hold it. -/
 def insetScene (src : String) : Async Scene := do
   let scene ← accessibleScene src
@@ -110,6 +120,7 @@ def main : IO Unit := do
     let scene ← accessibleScene src
     base.set (some scene)
     return scene
+  register "inkproof-huge-chart" hugeScene
   register "inkproof-inset-chart" insetScene
   register "inkproof-chart"
   register "inkproof-labelled-chart" labelledScene

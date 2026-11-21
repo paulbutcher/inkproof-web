@@ -3,6 +3,8 @@
 ## [0.17.0]
 
 - `legend="static"` (or `static bottom`) lists each series' colour and name with no values or readout, and still hides or shows a series on a click.
+- A legend row whose value is missing reads as a dash, never NaN or a neighbouring point's value.
+- The tooltip no longer overflows the stack over a trace of half a million points.
 
 ## [0.16.0]
 

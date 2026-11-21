@@ -143,7 +143,7 @@ theorem argmin_eq_none (d : Candidate → Float) (cs : List Candidate) : argmin 
 def candidates (traces : Array Trace) : List Candidate :=
   (traces.toList.zipIdx.flatMap fun (t, s) =>
     if t.hidden then [] else
-      (t.xs.toList.zip t.ys.toList).zipIdx.filterMap fun ((x, y), i) =>
+      (t.xs.zip t.ys).toList.zipIdx.filterMap fun ((x, y), i) =>
         if x.isNaN || y.isNaN then none else some ⟨s, i, x, y⟩)
 
 /-- The visible point nearest to `(cx, cy)` under `metric`, and the first of equals. -/
@@ -154,7 +154,7 @@ def find (metric : Metric) (traces : Array Trace) (cx cy : Float) : Option Candi
 theorem mem_candidates (traces : Array Trace) (c : Candidate) :
     c ∈ candidates traces ↔ ∃ t, traces[c.series]? = some t ∧ t.hidden = false ∧
       t.xs[c.point]? = some c.x ∧ t.ys[c.point]? = some c.y ∧ c.x.isNaN = false ∧ c.y.isNaN = false := by
-  simp only [candidates, List.mem_flatMap, List.mem_zipIdx_iff_getElem?]
+  simp only [candidates, Array.toList_zip, List.mem_flatMap, List.mem_zipIdx_iff_getElem?]
   constructor
   · rintro ⟨⟨t, s⟩, h1, h2⟩
     by_cases hh : t.hidden = true

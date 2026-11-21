@@ -757,6 +757,23 @@ test('a static legend lists each series without values or readout, and still tog
   await context.close();
 });
 
+test('the cursor, tooltip and legend work over a trace of half a million points', async () => {
+  const { page, context } = await open('/huge.html');
+  await drawn(page, 1);
+  await page.evaluate(() => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: rect.left + 200, clientY: rect.top + 100 }));
+  });
+  const row = () => page.evaluate(() =>
+    document.getElementById('a').shadowRoot.querySelector('.legend button').textContent);
+  assert.match(await row(), /^Wave: \S+$/, 'the legend reads the value at the cursor, not the last one');
+  assert.match(await page.evaluate(() => document.getElementById('a').shadowRoot.querySelector('.tip').textContent), /^Wave: 25\d{4}, /);
+
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
 test('a sized chart makes its scene again for its new size and keeps its legend outside the plot', async () => {
   const { page, context } = await open('/sized.html');
   await drawn(page, 1);
