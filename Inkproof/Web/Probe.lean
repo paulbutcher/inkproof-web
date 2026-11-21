@@ -43,7 +43,9 @@ structure ValueGroup where
   color : String
   labels : Array String
   xs : Array Float
-  values : Array (Array Float)
+  values : Array (Array Float) := #[]
+  /-- Text in place of a number: `words[i][j]` is the text named `labels[j]` at `xs[i]`, none where it is missing. A text takes the place of the number of the same entry. -/
+  words : Array (Array (Option String)) := #[]
   /-- Whether a click on the group's entries hides or shows it. -/
   hideable : Bool := false
   hidden : Bool := false

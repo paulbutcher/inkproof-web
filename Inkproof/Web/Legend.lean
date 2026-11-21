@@ -15,6 +15,8 @@ structure LegendRow where
   hidden : Bool
   value : Option Float
   last : Bool
+  /-- A text read in place of `value`. -/
+  word : Option String := none
 
 /-- The entry of `ps` whose position is nearest `x`, among those with a position; the first of equally near ones. -/
 def nearestBy {α : Type} (ps : Array (Float × α)) (x : Float) : Option (Float × α) :=
@@ -160,6 +162,17 @@ theorem valuesAt_getElem? (g : ValueGroup) (i : Option Nat) (j : Nat) :
 theorem valuesAt_size (g : ValueGroup) (i : Option Nat) : (g.valuesAt i).size = g.labels.size := by
   simp [valuesAt]
 
+/-- The group's texts at x index `i`, each none where it is missing; none for all where there is no such index. -/
+def wordsAt (g : ValueGroup) (i : Option Nat) : Array (Option String) :=
+  g.labels.mapIdx fun j _ => (i.bind fun i => g.words[i]?.bind (·[j]?)).bind id
+
+theorem wordsAt_getElem? (g : ValueGroup) (i : Option Nat) (j : Nat) :
+    (g.wordsAt i)[j]? = g.labels[j]?.map fun _ => (i.bind fun i => g.words[i]?.bind (·[j]?)).bind id := by
+  simp [wordsAt]
+
+theorem wordsAt_size (g : ValueGroup) (i : Option Nat) : (g.wordsAt i).size = g.labels.size := by
+  simp [wordsAt]
+
 end ValueGroup
 
 namespace Legend
@@ -171,9 +184,12 @@ def rows (traces : Array Trace) (x : Option Float) : Array LegendRow :=
 
 /-- The rows for a group of values, one for each label, at the group's x nearest the cursor at `x`, or at its last x with no cursor. -/
 def groupRows (g : ValueGroup) (x : Option Float) : Array LegendRow :=
-  let values := g.valuesAt (x.elim (if g.xs.size = 0 then none else some (g.xs.size - 1)) g.nearestIndex)
+  let i := x.elim (if g.xs.size = 0 then none else some (g.xs.size - 1)) g.nearestIndex
+  let values := g.valuesAt i
+  let words := g.wordsAt i
   g.labels.mapIdx fun j label =>
-    { name := label, color := g.color, hidden := g.hidden, value := values.getD j none, last := x.isNone }
+    { name := label, color := g.color, hidden := g.hidden, value := values.getD j none, last := x.isNone,
+      word := words.getD j none }
 
 theorem groupRows_size (g : ValueGroup) (x : Option Float) : (groupRows g x).size = g.labels.size := by
   simp [groupRows]
@@ -182,7 +198,8 @@ theorem groupRows_getElem? (g : ValueGroup) (x : Option Float) (j : Nat) :
     (groupRows g x)[j]? = g.labels[j]?.map fun label =>
       { name := label, color := g.color, hidden := g.hidden,
         value := (g.valuesAt (x.elim (if g.xs.size = 0 then none else some (g.xs.size - 1)) g.nearestIndex)).getD j none,
-        last := x.isNone } := by
+        last := x.isNone,
+        word := (g.wordsAt (x.elim (if g.xs.size = 0 then none else some (g.xs.size - 1)) g.nearestIndex)).getD j none } := by
   simp [groupRows]
 
 theorem groupRows_last (g : ValueGroup) : ∀ r ∈ groupRows g none, r.last = true := by
@@ -191,9 +208,9 @@ theorem groupRows_last (g : ValueGroup) : ∀ r ∈ groupRows g none, r.last = t
   obtain ⟨_, _, rfl⟩ := hr
   rfl
 
-/-- What a row reads as: its name, then its value or a dash, marked when it is the last value. -/
+/-- What a row reads as: its name, then its text, else its value, else a dash, marked when it is the last value. -/
 def text (r : LegendRow) : String :=
-  s!"{r.name}: {(r.value.map showFloat).getD "-"}{if r.last then " (last)" else ""}"
+  s!"{r.name}: {r.word.getD ((r.value.map showFloat).getD "-")}{if r.last then " (last)" else ""}"
 
 /-- What the cursor readout says: the x position, and the y position when the pointer is over the chart. -/
 def readout (x : Float) (y : Option Float) : String :=
@@ -219,7 +236,7 @@ theorem rows_last (traces : Array Trace) : ∀ r ∈ rows traces none, r.last = 
   simp [rows]
 
 theorem text_eq (r : LegendRow) :
-    text r = s!"{r.name}: {(r.value.map showFloat).getD "-"}{if r.last then " (last)" else ""}" := rfl
+    text r = s!"{r.name}: {r.word.getD ((r.value.map showFloat).getD "-")}{if r.last then " (last)" else ""}" := rfl
 
 /-- Where the legend sits: over the plot at its top right, or below the plot at the right, in room of its own. -/
 inductive Placement where

@@ -76,7 +76,18 @@ def legendGapCase : TestCase :=
     check (over.isNone && beside == some 7 && last.all (·.value.isNone))
       s!"{over} {beside} {last.map (·.value)}"
 
+def legendWordsCase : TestCase :=
+  .mk "a text group reads the state nearest the cursor" do
+    let g : ValueGroup := {
+      name := "g", color := "#000", labels := #["a", "b"], xs := #[0, 10]
+      words := #[#[some "on", none], #[some "idle", some "off"]] }
+    let at8 := (Legend.groupRows g (some 8)).map Legend.text
+    let last := (Legend.groupRows g none).map Legend.text
+    check (at8 == #["a: idle", "b: off"] && last == #["a: idle (last)", "b: off (last)"] &&
+        (Legend.groupRows g (some 1)).map Legend.text == #["a: on", "b: -"])
+      s!"{at8} {last}"
+
 def tests : List TestCase :=
-  [sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase, dragCase, legendGapCase]
+  [legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase, dragCase, legendGapCase]
 
 end InkproofWebTest

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.19.0]
+
+- A group can give text in place of numbers (`ValueGroup.words`), such as a state at the cursor's x, shown in the legend with a dash where there is none.
+
 ## [0.18.0]
 
 - `Access.groups` lists groups of named values per x, such as a candle's open, high, low and close; the legend shows them at the x nearest the cursor, or the last x with no cursor, and a group marked hideable toggles on a click and is reported as `inkproof-group`.

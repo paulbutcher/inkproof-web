@@ -109,7 +109,7 @@ field Inkproof.Web.Legend.Style.live : Inkproof.Web.Legend.Style → Bool
 constructor Inkproof.Web.Legend.Style.mk : Inkproof.Web.Legend.Placement → Bool → Inkproof.Web.Legend.Style
 field Inkproof.Web.Legend.Style.placement : Inkproof.Web.Legend.Style → Inkproof.Web.Legend.Placement
 def Inkproof.Web.Legend.groupRows : Inkproof.Web.ValueGroup → Option Float → Array Inkproof.Web.LegendRow
-theorem Inkproof.Web.Legend.groupRows_getElem? : ∀ (g : Inkproof.Web.ValueGroup) (x : Option Float) (j : Nat), (Inkproof.Web.Legend.groupRows g x)[j]? = Option.map (fun label => { name := label, color := g.color, hidden := g.hidden, value := (g.valuesAt (x.elim (if g.xs.size = 0 then Option.none else Option.some (g.xs.size - 1)) g.nearestIndex)).getD j Option.none, last := x.isNone }) g.labels[j]?
+theorem Inkproof.Web.Legend.groupRows_getElem? : ∀ (g : Inkproof.Web.ValueGroup) (x : Option Float) (j : Nat), (Inkproof.Web.Legend.groupRows g x)[j]? = Option.map (fun label => { name := label, color := g.color, hidden := g.hidden, value := (g.valuesAt (x.elim (if g.xs.size = 0 then Option.none else Option.some (g.xs.size - 1)) g.nearestIndex)).getD j Option.none, last := x.isNone, word := (g.wordsAt (x.elim (if g.xs.size = 0 then Option.none else Option.some (g.xs.size - 1)) g.nearestIndex)).getD j Option.none }) g.labels[j]?
 theorem Inkproof.Web.Legend.groupRows_last : ∀ (g : Inkproof.Web.ValueGroup) (r : Inkproof.Web.LegendRow), r ∈ Inkproof.Web.Legend.groupRows g Option.none → r.last = Bool.true
 theorem Inkproof.Web.Legend.groupRows_size : ∀ (g : Inkproof.Web.ValueGroup) (x : Option Float), (Inkproof.Web.Legend.groupRows g x).size = g.labels.size
 instance Inkproof.Web.Legend.instDecidableEqPlacement : DecidableEq Inkproof.Web.Legend.Placement
@@ -148,7 +148,7 @@ theorem Inkproof.Web.Legend.rows_getElem? : ∀ (traces : Array Inkproof.Web.Tra
 theorem Inkproof.Web.Legend.rows_last : ∀ (traces : Array Inkproof.Web.Trace) (r : Inkproof.Web.LegendRow), r ∈ Inkproof.Web.Legend.rows traces Option.none → r.last = Bool.true
 theorem Inkproof.Web.Legend.rows_size : ∀ (traces : Array Inkproof.Web.Trace) (x : Option Float), (Inkproof.Web.Legend.rows traces x).size = traces.size
 def Inkproof.Web.Legend.text : Inkproof.Web.LegendRow → String
-theorem Inkproof.Web.Legend.text_eq : ∀ (r : Inkproof.Web.LegendRow), Inkproof.Web.Legend.text r = ToString.toString r.name ++ ToString.toString ": " ++ ToString.toString ((Option.map Inkproof.Web.showFloat r.value).getD "-") ++ ToString.toString (if r.last = Bool.true then " (last)" else "")
+theorem Inkproof.Web.Legend.text_eq : ∀ (r : Inkproof.Web.LegendRow), Inkproof.Web.Legend.text r = ToString.toString r.name ++ ToString.toString ": " ++ ToString.toString (r.word.getD ((Option.map Inkproof.Web.showFloat r.value).getD "-")) ++ ToString.toString (if r.last = Bool.true then " (last)" else "")
 def Inkproof.Web.Legend.toggle : Array Inkproof.Web.Trace → Nat → Array Inkproof.Web.Trace
 theorem Inkproof.Web.Legend.toggle_hidden : ∀ (traces : Array Inkproof.Web.Trace) (i : Nat), Option.map (fun x => x.hidden) (Inkproof.Web.Legend.toggle traces i)[i]? = Option.map (fun x => !x.hidden) traces[i]?
 theorem Inkproof.Web.Legend.toggle_size : ∀ (traces : Array Inkproof.Web.Trace) (i : Nat), (Inkproof.Web.Legend.toggle traces i).size = traces.size
@@ -158,9 +158,10 @@ structure Inkproof.Web.LegendRow : Type
 field Inkproof.Web.LegendRow.color : Inkproof.Web.LegendRow → String
 field Inkproof.Web.LegendRow.hidden : Inkproof.Web.LegendRow → Bool
 field Inkproof.Web.LegendRow.last : Inkproof.Web.LegendRow → Bool
-constructor Inkproof.Web.LegendRow.mk : String → String → Bool → Option Float → Bool → Inkproof.Web.LegendRow
+constructor Inkproof.Web.LegendRow.mk : String → String → Bool → Option Float → Bool → Option String → Inkproof.Web.LegendRow
 field Inkproof.Web.LegendRow.name : Inkproof.Web.LegendRow → String
 field Inkproof.Web.LegendRow.value : Inkproof.Web.LegendRow → Option Float
+field Inkproof.Web.LegendRow.word : Inkproof.Web.LegendRow → Option String
 inductive Inkproof.Web.Level : Type
 constructor Inkproof.Web.Level.debug : Inkproof.Web.Level
 def Inkproof.Web.Level.defaultThreshold : Inkproof.Web.Level
@@ -316,7 +317,7 @@ field Inkproof.Web.ValueGroup.color : Inkproof.Web.ValueGroup → String
 field Inkproof.Web.ValueGroup.hidden : Inkproof.Web.ValueGroup → Bool
 field Inkproof.Web.ValueGroup.hideable : Inkproof.Web.ValueGroup → Bool
 field Inkproof.Web.ValueGroup.labels : Inkproof.Web.ValueGroup → Array String
-constructor Inkproof.Web.ValueGroup.mk : String → String → Array String → Array Float → Array (Array Float) → Bool → Bool → Inkproof.Web.ValueGroup
+constructor Inkproof.Web.ValueGroup.mk : String → String → Array String → Array Float → Array (Array Float) → Array (Array (Option String)) → Bool → Bool → Inkproof.Web.ValueGroup
 field Inkproof.Web.ValueGroup.name : Inkproof.Web.ValueGroup → String
 def Inkproof.Web.ValueGroup.nearestIndex : Inkproof.Web.ValueGroup → Float → Option Nat
 theorem Inkproof.Web.ValueGroup.nearestIndex_eq : ∀ (g : Inkproof.Web.ValueGroup) (x : Float), g.nearestIndex x = Option.map (fun x => x.snd) (Inkproof.Web.nearestBy g.xs.zipIdx x)
@@ -325,6 +326,10 @@ field Inkproof.Web.ValueGroup.values : Inkproof.Web.ValueGroup → Array (Array 
 def Inkproof.Web.ValueGroup.valuesAt : Inkproof.Web.ValueGroup → Option Nat → Array (Option Float)
 theorem Inkproof.Web.ValueGroup.valuesAt_getElem? : ∀ (g : Inkproof.Web.ValueGroup) (i : Option Nat) (j : Nat), (g.valuesAt i)[j]? = Option.map (fun x => (i.bind fun i => g.values[i]?.bind fun x => x[j]?).bind fun v => if v.isNaN = Bool.true then Option.none else Option.some v) g.labels[j]?
 theorem Inkproof.Web.ValueGroup.valuesAt_size : ∀ (g : Inkproof.Web.ValueGroup) (i : Option Nat), (g.valuesAt i).size = g.labels.size
+field Inkproof.Web.ValueGroup.words : Inkproof.Web.ValueGroup → Array (Array (Option String))
+def Inkproof.Web.ValueGroup.wordsAt : Inkproof.Web.ValueGroup → Option Nat → Array (Option String)
+theorem Inkproof.Web.ValueGroup.wordsAt_getElem? : ∀ (g : Inkproof.Web.ValueGroup) (i : Option Nat) (j : Nat), (g.wordsAt i)[j]? = Option.map (fun x => (i.bind fun i => g.words[i]?.bind fun x => x[j]?).bind id) g.labels[j]?
+theorem Inkproof.Web.ValueGroup.wordsAt_size : ∀ (g : Inkproof.Web.ValueGroup) (i : Option Nat), (g.wordsAt i).size = g.labels.size
 field Inkproof.Web.ValueGroup.xs : Inkproof.Web.ValueGroup → Array Float
 def Inkproof.Web.View.ofBounds : Float → Float → Float → Float → Inkproof.Viewport.View Float
 theorem Inkproof.Web.View.ofBounds_x : ∀ (xStart xEnd yStart yEnd : Float), (Inkproof.Web.View.ofBounds xStart xEnd yStart yEnd).x = { start := xStart, span := xEnd - xStart }
