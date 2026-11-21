@@ -772,3 +772,19 @@ test('a sized chart makes its scene again for its new size and keeps its legend 
   assert.ok(layout.legend.bottom <= layout.host.bottom + 0.5, 'the legend leaves the element');
   await context.close();
 });
+
+test('a clipped draw covers the whole plot at any device pixel ratio', async () => {
+  for (const factor of [1, 2, 3]) {
+    const { page, context } = await open('/pixels.html', { deviceScaleFactor: factor });
+    await drawn(page, 1);
+    const corners = await page.evaluate(() => {
+      const c = document.querySelector('inkproof-pixel-chart').shadowRoot.querySelector('canvas');
+      const px = (x, y) => [...c.getContext('2d').getImageData(x, y, 1, 1).data];
+      return { width: c.width, pixels: [px(2, 2), px(c.width - 3, 2), px(2, c.height - 3), px(c.width - 3, c.height - 3)] };
+    });
+    assert.equal(corners.width, 400 * factor);
+    for (const rgba of corners.pixels) assert.deepEqual(rgba, corners.pixels[0], `ratio ${factor}: the corners differ`);
+    assert.notDeepEqual(corners.pixels[0], [255, 255, 255, 255], `ratio ${factor}: nothing drawn`);
+    await context.close();
+  }
+});

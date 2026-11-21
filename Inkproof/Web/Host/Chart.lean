@@ -99,8 +99,8 @@ def fetchScene (src : String) : Async Scene := do
     throw (IO.userError s!"fetching {src} gave status {← response.status}")
   return { commands := ← response.bytes }
 
-/-- Makes the scene for a `src` and the CSS size of the chart's canvas. -/
-private abbrev Loader := String → Nat → Nat → Async Scene
+/-- Makes the scene for a `src`, the CSS size of the chart's canvas and its backing store size in device pixels. -/
+private abbrev Loader := String → Nat × Nat → Nat × Nat → Async Scene
 
 private structure Shared where
   canvas : Value
@@ -145,7 +145,7 @@ private structure Chart where
   frameCallback : IO.Ref (Option Value)
   observer : IO.Ref (Option Value)
   /-- The CSS size the scene was last made for. -/
-  sceneSize : IO.Ref (Nat × Nat)
+  sceneSize : IO.Ref ((Nat × Nat) × (Nat × Nat))
   /-- Counts size changes, so that only the last of a burst reloads the scene. -/
   resizes : IO.Ref Nat
   ratioQuery : IO.Ref (Option (Value × Value))
@@ -288,10 +288,19 @@ private def cssSize (c : Chart) : IO (Nat × Nat) := do
   let height ← rect.get "height" Float
   return (width.round.toUInt64.toNat, height.round.toUInt64.toNat)
 
+private def devicePixelRatio : IO Milli := do
+  let dpr ← (← global).get "devicePixelRatio" Float
+  return (dpr * 1000).round.toUInt64.toNat
+
+/-- The canvas's CSS size and the backing store size it needs at the current device pixel ratio. -/
+private def sceneSizes (c : Chart) : IO ((Nat × Nat) × (Nat × Nat)) := do
+  let (w, h) ← cssSize c
+  let b := Size.backing w h (← devicePixelRatio)
+  return ((w, h), (b.width, b.height))
+
 private def sync (c : Chart) : IO Unit := do
   let (cssWidth, cssHeight) ← cssSize c
-  let dpr ← (← global).get "devicePixelRatio" Float
-  let ratio : Milli := (dpr * 1000).round.toUInt64.toNat
+  let ratio ← devicePixelRatio
   let current ← c.size.get
   if current.needsResize cssWidth cssHeight ratio then
     let next := Size.backing cssWidth cssHeight ratio
@@ -303,13 +312,14 @@ private def sync (c : Chart) : IO Unit := do
     invalidate c
 
 /-- A change in device pixel ratio fires no resize, but it flips the media query that names the old ratio. Partial because the listener, which fires once, re-arms itself and so recurses through a closure. -/
-private partial def watchRatio (c : Chart) : IO Unit := do
+private partial def watchRatio (c : Chart) (after : IO Unit) : IO Unit := do
   let dpr ← (← global).get "devicePixelRatio" Float
   let query ← (← global).callMethod "matchMedia" #[toJS s!"(resolution: {dpr}dppx)"]
   let changed ← Function.ofSyncFn fun _ => do
     if (← c.alive.get) then
       sync c
-      watchRatio c
+      after
+      watchRatio c after
     return .undefined
   query.callMethod "addEventListener" #[toJS "change", toJS changed, obj [("once", .bool true)]] Unit
   c.ratioQuery.set (some (query, changed))
@@ -364,7 +374,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipMode := ← IO.mkRef none, legendOn := ← IO.mkRef false, hidden := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
-    generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef (0, 0), resizes := ← IO.mkRef 0
+    generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
     ratioQuery := ← IO.mkRef none }
 
 private def setText (c : Chart) (text : String) : IO Unit := c.announcer.set "textContent" text
@@ -700,9 +710,9 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
     c.generation.modify (· + 1)
     let generation ← c.generation.get
     try
-      let (width, height) ← cssSize c
-      c.sceneSize.set (width, height)
-      let scene ← loader attrs.src width height
+      let sizes ← sceneSizes c
+      c.sceneSize.set sizes
+      let scene ← loader attrs.src sizes.1 sizes.2
       -- A newer load or a disconnect has overtaken this one.
       if (← c.generation.get) == generation && (← c.alive.get) then
         c.scene.set (some scene)
@@ -736,18 +746,18 @@ def setScene (el : Value) (scene : Scene) : IO Unit := do
 
 /-- Make the scene again for the canvas's size, once it has stopped changing, keeping the chart's view. -/
 private def settle (c : Chart) (loader : Loader) : IO Unit := do
-  let (width, height) ← cssSize c
-  if (width, height) == (← c.sceneSize.get) || width == 0 || height == 0 then return
+  let sizes ← sceneSizes c
+  if sizes == (← c.sceneSize.get) || sizes.1.1 == 0 || sizes.1.2 == 0 then return
   let token ← c.resizes.modifyGet fun n => (n + 1, n + 1)
   let fire ← Function.ofFn fun _ => do
     if (← c.alive.get) && (← c.resizes.get) == token then
-      let (width, height) ← cssSize c
-      c.sceneSize.set (width, height)
+      let sizes ← sceneSizes c
+      c.sceneSize.set sizes
       try
-        let scene ← loader ((← getAttr c.el "src").getD "") width height
+        let scene ← loader ((← getAttr c.el "src").getD "") sizes.1 sizes.2
         if (← c.alive.get) && (← c.resizes.get) == token then setScene c.el scene
       catch e =>
-        fail c s!"making the scene for the new size failed: {e}" [("size", s!"{width}x{height}")]
+        fail c s!"making the scene for the new size failed: {e}" [("size", s!"{sizes.1.1}x{sizes.1.2}")]
     return .undefined
   discard <| (← global).callMethod "setTimeout" #[toJS fire, toJS (150 : Nat)] Value
 
@@ -842,7 +852,7 @@ private def connect (loader : Loader) (resizes : Bool) (args : Array Data) : Asy
   observer.callMethod "observe" #[toJS el] Unit
   observer.callMethod "observe" #[toJS c.canvas] Unit
   c.observer.set (some observer)
-  watchRatio c
+  watchRatio c (if resizes then settle c loader else pure ())
   sync c
   load c loader
 
@@ -925,6 +935,10 @@ def register (tag : String) (loader : String → Async Scene := fetchScene) (but
 
 /-- Like `register`, for a chart whose scene depends on its size: `loader` is given the `src` and the canvas's CSS width and height, and is called again, after the size has stopped changing for a moment, with the new size. The chart keeps its view, cursor and hidden series across the new scene. -/
 def registerSized (tag : String) (loader : String → Nat → Nat → Async Scene) (buttons : Bool := false) : IO Unit :=
+  define tag (fun src css _ => loader src css.1 css.2) true buttons
+
+/-- Like `registerSized`, for a chart whose commands are in device pixels, such as a Gpu frame for a target of a given size: `loader` is given the backing store's size too, which follows the device pixel ratio, and is called again when either size changes. A clip or a stroke width in the commands is then in the pixels of the canvas, whatever the ratio. -/
+def registerPixels (tag : String) (loader : String → Nat × Nat → Nat × Nat → Async Scene) (buttons : Bool := false) : IO Unit :=
   define tag loader true buttons
 
 end Inkproof.Web.Host

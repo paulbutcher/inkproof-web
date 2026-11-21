@@ -66,6 +66,19 @@ def sizedScene (src : String) (width height : Nat) : Async Scene := do
   let y := height.toFloat / 2
   return { scene with labels := #[{ text := "MMMM", x, y, align := .center, baseline := .middle }] }
 
+/-- A red quad filling the target, drawn under a scissor that covers the whole backing store; the wire says the scissor is in device pixels from the bottom left. -/
+def clippedScene (_ : String) (_css backing : Nat × Nat) : Async Scene := do
+  let one : UInt32 := 0x3f800000
+  let neg : UInt32 := 0xbf800000
+  let words : List UInt32 := [neg, neg, one, neg, neg, one, one, neg, one, one, neg, one]
+  let cmds : List Cmd := [⟨8, [.words []]⟩, ⟨6, [.u32 0xffffffff]⟩, ⟨7, [.u32 0]⟩,
+    ⟨0, [.u32 0]⟩, ⟨1, [.u32 0, .words words]⟩, ⟨3, [.u32 0]⟩,
+    ⟨4, [.u32 0, .words [one, one]]⟩, ⟨4, [.u32 1, .words [0, 0]]⟩, ⟨4, [.u32 2, .words [0]]⟩,
+    ⟨4, [.u32 3, .words [one, one, one, one]]⟩, ⟨4, [.u32 4, .words [0, 0, one, one]]⟩,
+    ⟨8, [.words [0, 0, backing.1.toUInt32, backing.2.toUInt32]]⟩,
+    ⟨5, [.u32 0, .u32 6, .u32 2]⟩]
+  return { commands := ByteArray.mk (encode cmds).toArray }
+
 /-- A scene that draws one buffer, uploaded only when the cache does not hold it. -/
 def cachedScene (cache : SceneCache) : IO Scene :=
   cache.build fun c fresh => do
@@ -102,6 +115,7 @@ def main : IO Unit := do
   register "inkproof-labelled-chart" labelledScene
   register "inkproof-turned-chart" turnedScene
   registerSized "inkproof-sized-chart" sizedScene
+  registerPixels "inkproof-pixel-chart" clippedScene
   let doc ← (← global).get "document"
   if let .ref el _ ← doc.callMethod "querySelector" #[toJS "inkproof-replacing-chart"] Data then
     answerViews el base
