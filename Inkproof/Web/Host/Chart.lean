@@ -99,6 +99,9 @@ def fetchScene (src : String) : Async Scene := do
     throw (IO.userError s!"fetching {src} gave status {← response.status}")
   return { commands := ← response.bytes }
 
+/-- Makes the scene for a `src` and the CSS size of the chart's canvas. -/
+private abbrev Loader := String → Nat → Nat → Async Scene
+
 private structure Shared where
   canvas : Value
   gl : Value
@@ -141,6 +144,10 @@ private structure Chart where
   generation : IO.Ref Nat
   frameCallback : IO.Ref (Option Value)
   observer : IO.Ref (Option Value)
+  /-- The CSS size the scene was last made for. -/
+  sceneSize : IO.Ref (Nat × Nat)
+  /-- Counts size changes, so that only the last of a burst reloads the scene. -/
+  resizes : IO.Ref Nat
   ratioQuery : IO.Ref (Option (Value × Value))
 
 /-- One WebGL2 context serves every chart on the page: each draws into it and copies the result to its own canvas. -/
@@ -274,14 +281,17 @@ private def invalidate (c : Chart) : IO Unit := do
   c.frame.modify Frame.invalidate
   schedule c
 
-private def sync (c : Chart) : IO Unit := do
-  let rect ← c.el.callMethod "getBoundingClientRect" #[]
+/-- The canvas's size in CSS pixels, which is the element's less the room a legend outside the plot takes. -/
+private def cssSize (c : Chart) : IO (Nat × Nat) := do
+  let rect ← c.canvas.callMethod "getBoundingClientRect" #[]
   let width ← rect.get "width" Float
   let height ← rect.get "height" Float
+  return (width.round.toUInt64.toNat, height.round.toUInt64.toNat)
+
+private def sync (c : Chart) : IO Unit := do
+  let (cssWidth, cssHeight) ← cssSize c
   let dpr ← (← global).get "devicePixelRatio" Float
   let ratio : Milli := (dpr * 1000).round.toUInt64.toNat
-  let cssWidth := width.round.toUInt64.toNat
-  let cssHeight := height.round.toUInt64.toNat
   let current ← c.size.get
   if current.needsResize cssWidth cssHeight ratio then
     let next := Size.backing cssWidth cssHeight ratio
@@ -308,6 +318,8 @@ private def styles : String :=
   ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host{touch-action:none}" ++
   ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:nowrap;padding:2px 6px;background:#fff;border:1px solid #888;font:12px sans-serif}" ++
   ".legend{position:absolute;top:0;right:0;display:flex;flex-direction:column;font:12px sans-serif}.legend button{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit;cursor:pointer}" ++
+  ":host([legend=bottom]){display:flex;flex-direction:column}:host([legend=bottom]) canvas{flex:1 1 0;min-height:0;height:auto}" ++
+  ":host([legend=bottom]) .legend{position:static;flex:none;flex-direction:row;justify-content:flex-end;align-items:center;gap:12px;height:20px}" ++
   ".legend .readout{text-align:right}.legend button[aria-pressed=false]{opacity:0.4}.swatch{display:inline-block;width:10px;height:10px}" ++
   ".hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}" ++
   ":host([show-table]) canvas{display:none}:host([show-table]) .hidden:not([aria-live]){position:static;width:100%;height:auto;overflow:auto;clip-path:none}"
@@ -352,7 +364,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipMode := ← IO.mkRef none, legendOn := ← IO.mkRef false, hidden := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
-    generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none
+    generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef (0, 0), resizes := ← IO.mkRef 0
     ratioQuery := ← IO.mkRef none }
 
 private def setText (c : Chart) (text : String) : IO Unit := c.announcer.set "textContent" text
@@ -551,7 +563,7 @@ private def onKey (c : Chart) (event : Value) : IO Unit := do
 
 /-- The pointer's position in pixels from the plot's top left. -/
 private def position (c : Chart) (event : Value) : IO Px := do
-  let rect ← c.el.callMethod "getBoundingClientRect" #[]
+  let rect ← c.canvas.callMethod "getBoundingClientRect" #[]
   let origin := ((← c.scene.get).map (·.access.plotOrigin)).getD (0, 0)
   return ((← event.get "clientX" Float) - (← rect.get "left" Float) - origin.1,
           (← event.get "clientY" Float) - (← rect.get "top" Float) - origin.2)
@@ -656,7 +668,7 @@ private def joinGroup (c : Chart) : IO Unit := do
   let some name ← c.group.get | return
   if let some (p, _, nav) := (← peers name).find? (·.1.id != c.id) then followFrom p (← groupView p nav)
 
-private def load (c : Chart) (loader : String → Async Scene) : Async Unit := do
+private def load (c : Chart) (loader : Loader) : Async Unit := do
   let src ← getAttr c.el "src"
   let level ← getAttr c.el "log-level"
   let boxAxes ← getAttr c.el "box-zoom"
@@ -688,7 +700,9 @@ private def load (c : Chart) (loader : String → Async Scene) : Async Unit := d
     c.generation.modify (· + 1)
     let generation ← c.generation.get
     try
-      let scene ← loader attrs.src
+      let (width, height) ← cssSize c
+      c.sceneSize.set (width, height)
+      let scene ← loader attrs.src width height
       -- A newer load or a disconnect has overtaken this one.
       if (← c.generation.get) == generation && (← c.alive.get) then
         c.scene.set (some scene)
@@ -719,6 +733,23 @@ def setScene (el : Value) (scene : Scene) : IO Unit := do
   describe c scene.access
   refreshProbe c
   invalidate c
+
+/-- Make the scene again for the canvas's size, once it has stopped changing, keeping the chart's view. -/
+private def settle (c : Chart) (loader : Loader) : IO Unit := do
+  let (width, height) ← cssSize c
+  if (width, height) == (← c.sceneSize.get) || width == 0 || height == 0 then return
+  let token ← c.resizes.modifyGet fun n => (n + 1, n + 1)
+  let fire ← Function.ofFn fun _ => do
+    if (← c.alive.get) && (← c.resizes.get) == token then
+      let (width, height) ← cssSize c
+      c.sceneSize.set (width, height)
+      try
+        let scene ← loader ((← getAttr c.el "src").getD "") width height
+        if (← c.alive.get) && (← c.resizes.get) == token then setScene c.el scene
+      catch e =>
+        fail c s!"making the scene for the new size failed: {e}" [("size", s!"{width}x{height}")]
+    return .undefined
+  discard <| (← global).callMethod "setTimeout" #[toJS fire, toJS (150 : Nat)] Value
 
 /-- Put the chart's cursor at x position `x` in data coordinates, or take it away, as the pointer over a chart outside its group would. -/
 def setCursor (el : Value) (x : Option Float) : IO Unit := do
@@ -778,7 +809,7 @@ private def chartOf (args : Array Data) : IO (Option Chart) := do
   let some (Data.ref el _) := args[0]? | return none
   chartOfElement el
 
-private def connect (loader : String → Async Scene) (args : Array Data) : Async Unit := do
+private def connect (loader : Loader) (resizes : Bool) (args : Array Data) : Async Unit := do
   let some (Data.ref el _) := args[0]? | return
   let id ← nextId.modifyGet fun n => (n, n + 1)
   let c ← build id el
@@ -803,10 +834,13 @@ private def connect (loader : String → Async Scene) (args : Array Data) : Asyn
   c.legendEl.callMethod "addEventListener" #[toJS "pointerdown", toJS keepPress] Unit
   c.frameCallback.set (some (← Function.ofSyncFn fun _ => do onFrame c; return .undefined))
   let observe ← Function.ofSyncFn fun _ => do
-    if (← c.alive.get) then sync c
+    if (← c.alive.get) then
+      sync c
+      if resizes then settle c loader
     return .undefined
   let observer ← (← (← global).get "ResizeObserver").new #[toJS observe]
   observer.callMethod "observe" #[toJS el] Unit
+  observer.callMethod "observe" #[toJS c.canvas] Unit
   c.observer.set (some observer)
   watchRatio c
   sync c
@@ -863,7 +897,7 @@ private def reselect (c : Chart) (value : Option String) : IO Unit := do
     if mode == .off then applyBand c none
     invalidate c
 
-private def changed (loader : String → Async Scene) (args : Array Data) : Async Unit := do
+private def changed (loader : Loader) (args : Array Data) : Async Unit := do
   if let some c ← chartOf args then
     if (← c.alive.get) then
       match args[1]? with
@@ -876,14 +910,21 @@ private def changed (loader : String → Async Scene) (args : Array Data) : Asyn
       | some (.string "tooltip") | some (.string "legend") => reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend")
       | _ => load c loader
 
-/-- Define the custom element `tag`: it draws the scene `loader` makes of its `src` attribute. With `buttons`, the page's `button[data-reset]` and `button[data-unlink]` act on the charts they name, with no page code. -/
-def register (tag : String) (loader : String → Async Scene := fetchScene) (buttons : Bool := false) : IO Unit := do
+private def define (tag : String) (loader : Loader) (resizes buttons : Bool) : IO Unit := do
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
   defineElement tag #["src", "log-level", "group", "cursor", "select", "tooltip", "legend", "cursor-dotted"]
-    (← Function.ofFn (connect loader · *> pure .undefined))
+    (← Function.ofFn (connect loader resizes · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))
+
+/-- Define the custom element `tag`: it draws the scene `loader` makes of its `src` attribute. With `buttons`, the page's `button[data-reset]` and `button[data-unlink]` act on the charts they name, with no page code. -/
+def register (tag : String) (loader : String → Async Scene := fetchScene) (buttons : Bool := false) : IO Unit :=
+  define tag (fun src _ _ => loader src) false buttons
+
+/-- Like `register`, for a chart whose scene depends on its size: `loader` is given the `src` and the canvas's CSS width and height, and is called again, after the size has stopped changing for a moment, with the new size. The chart keeps its view, cursor and hidden series across the new scene. -/
+def registerSized (tag : String) (loader : String → Nat → Nat → Async Scene) (buttons : Bool := false) : IO Unit :=
+  define tag loader true buttons
 
 end Inkproof.Web.Host

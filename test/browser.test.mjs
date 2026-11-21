@@ -731,3 +731,44 @@ test('the tooltip names the nearest visible point and the legend gives each seri
   assert.deepEqual(await page.evaluate(() => window.errors), []);
   await context.close();
 });
+
+test('a sized chart makes its scene again for its new size and keeps its legend outside the plot', async () => {
+  const { page, context } = await open('/sized.html');
+  await drawn(page, 1);
+  const inkCentre = () => page.evaluate(() => {
+    const c = document.querySelector('inkproof-sized-chart').shadowRoot.querySelector('canvas');
+    const k = c.width / c.getBoundingClientRect().width;
+    const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+      const i = (y * c.width + x) * 4;
+      if (data[i] > 90 || data[i + 1] > 90 || data[i + 2] > 90) continue;
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+    }
+    const r = c.getBoundingClientRect();
+    return { x: (x0 + x1) / 2 / k - r.width, y: (y0 + y1) / 2 / k - r.height / 2 };
+  });
+  const near = async what => {
+    await page.waitForFunction(() => window.draws.length > 0);
+    const { x, y } = await inkCentre();
+    assert.ok(Math.abs(x + 30) <= 3 && Math.abs(y) <= 3, `${what}: label off its anchor by ${x + 30}, ${y}`);
+  };
+  await near('first size');
+  await page.setViewportSize({ width: 900, height: 600 });
+  await page.evaluate(() => { document.querySelector('inkproof-sized-chart').style.width = '700px'; document.querySelector('inkproof-sized-chart').style.height = '320px'; });
+  await page.waitForFunction(() => document.querySelector('inkproof-sized-chart').shadowRoot.querySelector('canvas').getBoundingClientRect().width === 700);
+  await settle(page);
+  await settle(page);
+  await near('after resizing');
+  const layout = await page.evaluate(() => {
+    const root = document.querySelector('inkproof-sized-chart').shadowRoot;
+    const host = document.querySelector('inkproof-sized-chart').getBoundingClientRect();
+    const canvas = root.querySelector('canvas').getBoundingClientRect();
+    const legend = root.querySelector('.legend').getBoundingClientRect();
+    return { host, canvas, legend };
+  });
+  assert.ok(layout.canvas.bottom <= layout.legend.top + 0.5, 'the legend overlaps the plot');
+  assert.ok(Math.abs(layout.legend.right - layout.host.right) <= 1, 'the legend is not at the right');
+  assert.ok(layout.legend.bottom <= layout.host.bottom + 0.5, 'the legend leaves the element');
+  await context.close();
+});

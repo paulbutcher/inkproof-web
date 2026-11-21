@@ -59,6 +59,13 @@ private def answerViews (el : Value) (base : IO.Ref (Option Scene)) : IO Unit :=
   let onReset ← Function.ofSyncFn fun _ => do apply el .reset; return .undefined
   el.callMethod "addEventListener" #[toJS "test-reset", toJS onReset] Unit
 
+/-- A label centred 30 pixels in from the right edge and half way down, wherever that is for the canvas size asked for. -/
+def sizedScene (src : String) (width height : Nat) : Async Scene := do
+  let scene ← fetchScene src
+  let x := width.toFloat - 30
+  let y := height.toFloat / 2
+  return { scene with labels := #[{ text := "MMMM", x, y, align := .center, baseline := .middle }] }
+
 /-- A scene that draws one buffer, uploaded only when the cache does not hold it. -/
 def cachedScene (cache : SceneCache) : IO Scene :=
   cache.build fun c fresh => do
@@ -94,6 +101,7 @@ def main : IO Unit := do
   register "inkproof-chart"
   register "inkproof-labelled-chart" labelledScene
   register "inkproof-turned-chart" turnedScene
+  registerSized "inkproof-sized-chart" sizedScene
   let doc ← (← global).get "document"
   if let .ref el _ ← doc.callMethod "querySelector" #[toJS "inkproof-replacing-chart"] Data then
     answerViews el base

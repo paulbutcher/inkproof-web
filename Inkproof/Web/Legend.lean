@@ -68,15 +68,43 @@ theorem rows_last (traces : Array Trace) : ∀ r ∈ rows traces none, r.last = 
 theorem text_eq (r : LegendRow) :
     text r = s!"{r.name}: {(r.value.map showFloat).getD "-"}{if r.last then " (last)" else ""}" := rfl
 
-/-- Validate the raw `legend` attribute: present (empty or `on`) shows the legend, a missing one or `off` does not. -/
-def parse : Option String → Except String Bool
-  | none | some "off" => .ok false
-  | some "" | some "on" => .ok true
-  | some s => .error s!"attribute legend is \"{s}\", expected on or off"
+/-- Where the legend sits: over the plot at its top right, or below the plot at the right, in room of its own. -/
+inductive Placement where
+  | overlay
+  | below
+  deriving DecidableEq, Repr
+
+/-- Validate the raw `legend` attribute: present (empty or `on`) overlays the plot, `bottom` goes below it, a missing one or `off` shows none. -/
+def parsePlacement : Option String → Except String (Option Placement)
+  | none | some "off" => .ok none
+  | some "" | some "on" => .ok (some .overlay)
+  | some "bottom" => .ok (some .below)
+  | some s => .error s!"attribute legend is \"{s}\", expected on, bottom or off"
+
+theorem parsePlacement_bottom : parsePlacement (some "bottom") = .ok (some .below) := rfl
+
+theorem parsePlacement_none : parsePlacement none = .ok none := rfl
+
+theorem parsePlacement_empty : parsePlacement (some "") = .ok (some .overlay) := rfl
+
+theorem parsePlacement_on : parsePlacement (some "on") = .ok (some .overlay) := rfl
+
+theorem parsePlacement_off : parsePlacement (some "off") = .ok none := rfl
+
+theorem parsePlacement_other (s : String) (h1 : s ≠ "") (h2 : s ≠ "on") (h3 : s ≠ "off") (h4 : s ≠ "bottom") :
+    parsePlacement (some s) = .error s!"attribute legend is \"{s}\", expected on, bottom or off" := by
+  unfold parsePlacement
+  split <;> simp_all
+
+/-- Whether the raw `legend` attribute shows a legend. -/
+def parse (raw : Option String) : Except String Bool :=
+  (parsePlacement raw).map (·.isSome)
 
 theorem parse_none : parse none = .ok false := rfl
 
 theorem parse_empty : parse (some "") = .ok true := rfl
+
+theorem parse_bottom : parse (some "bottom") = .ok true := rfl
 
 /-- What a tooltip at `c` reads: the series and the point's position, from the traces `c` was found in. -/
 def tooltip (traces : Array Trace) (c : Candidate) : Option String := do

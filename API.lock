@@ -99,7 +99,22 @@ theorem Inkproof.Web.Group.parse_none : Inkproof.Web.Group.parse Option.none = E
 def Inkproof.Web.Group.toggled : Option String → Option String → Option String
 theorem Inkproof.Web.Group.toggled_linked : ∀ (name : String) (named : Option String), Inkproof.Web.Group.toggled (Option.some name) named = Option.none
 theorem Inkproof.Web.Group.toggled_unlinked : ∀ (named : Option String), Inkproof.Web.Group.toggled Option.none named = named
+inductive Inkproof.Web.Legend.Placement : Type
+def Inkproof.Web.Legend.Placement.ofNat : Nat → Inkproof.Web.Legend.Placement
+theorem Inkproof.Web.Legend.Placement.ofNat_ctorIdx : ∀ (x : Inkproof.Web.Legend.Placement), Inkproof.Web.Legend.Placement.ofNat x.ctorIdx = x
+constructor Inkproof.Web.Legend.Placement.overlay : Inkproof.Web.Legend.Placement
+instance Inkproof.Web.Legend.instDecidableEqPlacement : DecidableEq Inkproof.Web.Legend.Placement
+instance Inkproof.Web.Legend.instReprPlacement : Repr Inkproof.Web.Legend.Placement
+def Inkproof.Web.Legend.instReprPlacement.repr : Inkproof.Web.Legend.Placement → Nat → Std.Format
 def Inkproof.Web.Legend.parse : Option String → Except String Bool
+def Inkproof.Web.Legend.parsePlacement : Option String → Except String (Option Inkproof.Web.Legend.Placement)
+theorem Inkproof.Web.Legend.parsePlacement_bottom : Inkproof.Web.Legend.parsePlacement (Option.some "bottom") = Except.ok (Option.some Inkproof.Web.Legend.Placement.below)
+theorem Inkproof.Web.Legend.parsePlacement_empty : Inkproof.Web.Legend.parsePlacement (Option.some "") = Except.ok (Option.some Inkproof.Web.Legend.Placement.overlay)
+theorem Inkproof.Web.Legend.parsePlacement_none : Inkproof.Web.Legend.parsePlacement Option.none = Except.ok Option.none
+theorem Inkproof.Web.Legend.parsePlacement_off : Inkproof.Web.Legend.parsePlacement (Option.some "off") = Except.ok Option.none
+theorem Inkproof.Web.Legend.parsePlacement_on : Inkproof.Web.Legend.parsePlacement (Option.some "on") = Except.ok (Option.some Inkproof.Web.Legend.Placement.overlay)
+theorem Inkproof.Web.Legend.parsePlacement_other : ∀ (s : String), s ≠ "" → s ≠ "on" → s ≠ "off" → s ≠ "bottom" → Inkproof.Web.Legend.parsePlacement (Option.some s) = Except.error (ToString.toString "attribute legend is \"" ++ ToString.toString s ++ ToString.toString "\", expected on, bottom or off")
+theorem Inkproof.Web.Legend.parse_bottom : Inkproof.Web.Legend.parse (Option.some "bottom") = Except.ok Bool.true
 theorem Inkproof.Web.Legend.parse_empty : Inkproof.Web.Legend.parse (Option.some "") = Except.ok Bool.true
 theorem Inkproof.Web.Legend.parse_none : Inkproof.Web.Legend.parse Option.none = Except.ok Bool.false
 def Inkproof.Web.Legend.readout : Float → Option Float → String
