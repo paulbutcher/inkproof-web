@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.18.0]
+
+- `Access.groups` lists groups of named values per x, such as a candle's open, high, low and close; the legend shows them at the x nearest the cursor, or the last x with no cursor, and a group marked hideable toggles on a click and is reported as `inkproof-group`.
+
 ## [0.17.0]
 
 - `Host.registerPixels` gives the loader the CSS and the backing store sizes, so a frame's clips and stroke widths can match the canvas at any device pixel ratio.
