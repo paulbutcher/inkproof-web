@@ -42,6 +42,17 @@ def accessibleScene (src : String) : Async Scene := do
         { name := "North", color := "#d33", xs := #[0, 25, 50, 75, 100], ys := #[10, 30, 20, 60, 40] },
         { name := "South", color := "#36c", xs := #[0, 25, 50, 75, 100], ys := #[80, 70, 90, 50, 55] }] } }
 
+/-- A scene with no series and two groups of values at x of 10, 20 and 30: a candle's open and close, which the chart lets the legend hide, and a state, which it does not. -/
+def groupedValuesScene (src : String) : Async Scene := do
+  let scene ← accessibleScene src
+  return { scene with access := { scene.access with
+    traces := #[], series := #[],
+    groups := #[
+      { name := "Candle", color := "#383", labels := #["Open", "Close"], xs := #[10, 20, 30],
+        values := #[#[1, 2], #[3, 4], #[5, 6]], hideable := true },
+      { name := "State", color := "#888", labels := #["State"], xs := #[10, 20, 30],
+        values := #[#[7], #[8], #[0.0 / 0.0]] }] } }
+
 /-- A scene with one series of 500001 points, over a view of 0 to 500000. -/
 def hugeScene (src : String) : Async Scene := do
   let scene ← fetchScene src
@@ -120,6 +131,7 @@ def main : IO Unit := do
     let scene ← accessibleScene src
     base.set (some scene)
     return scene
+  register "inkproof-values-chart" groupedValuesScene
   register "inkproof-huge-chart" hugeScene
   register "inkproof-inset-chart" insetScene
   register "inkproof-chart"

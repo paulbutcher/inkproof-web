@@ -37,6 +37,17 @@ theorem onScreen_ys (config : ViewConfig Float) (view : View Float) (t : Trace) 
 
 end Trace
 
+/-- A group of named values at each x, such as a candle's open, high, low and close, which the legend reads without them being series of the chart. `values[i][j]` is the value named `labels[j]` at `xs[i]`, NaN where it is missing. -/
+structure ValueGroup where
+  name : String
+  color : String
+  labels : Array String
+  xs : Array Float
+  values : Array (Array Float)
+  /-- Whether a click on the group's entries hides or shows it. -/
+  hideable : Bool := false
+  hidden : Bool := false
+
 /-- A point of a trace: its series, its index and its position. -/
 structure Candidate where
   series : Nat

@@ -131,6 +131,8 @@ private structure Chart where
   legendLive : IO.Ref Bool
   /-- Which series the legend has hidden, by index. -/
   hidden : IO.Ref (Array Bool)
+  /-- Which hideable value groups the legend has hidden, by index. -/
+  hiddenGroups : IO.Ref (Array Bool)
   selectMode : IO.Ref SelectMode
   /-- The selected x range, in data coordinates. -/
   band : IO.Ref (Option (Selection.Band Float))
@@ -329,7 +331,7 @@ private partial def watchRatio (c : Chart) (after : IO Unit) : IO Unit := do
 private def styles : String :=
   ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host{touch-action:none}" ++
   ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:nowrap;padding:2px 6px;background:#fff;border:1px solid #888;font:12px sans-serif}" ++
-  ".legend{position:absolute;top:0;right:0;display:flex;flex-direction:column;font:12px sans-serif}.legend button{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit;cursor:pointer}" ++
+  ".legend{position:absolute;top:0;right:0;display:flex;flex-direction:column;font:12px sans-serif}.legend button,.legend .entry{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit}.legend button{cursor:pointer}" ++
   ":host([legend~=bottom]){display:flex;flex-direction:column}:host([legend~=bottom]) canvas{flex:1 1 0;min-height:0;height:auto}" ++
   ":host([legend~=bottom]) .legend{position:static;flex:none;flex-direction:row;justify-content:flex-end;align-items:center;gap:12px;height:20px}" ++
   ".legend .readout{text-align:right}.legend button[aria-pressed=false]{opacity:0.4}.swatch{display:inline-block;width:10px;height:10px}" ++
@@ -373,7 +375,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipMode := ← IO.mkRef none, legendOn := ← IO.mkRef false, legendLive := ← IO.mkRef true, hidden := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipMode := ← IO.mkRef none, legendOn := ← IO.mkRef false, legendLive := ← IO.mkRef true, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -471,6 +473,11 @@ private def activeTraces (c : Chart) (scene : Scene) : IO (Array Trace) := do
   let mask ← c.hidden.get
   return scene.access.traces.mapIdx fun i t => { t with hidden := mask[i]?.getD t.hidden }
 
+/-- The scene's value groups with the legend's choice of which are hidden. -/
+private def activeGroups (c : Chart) (scene : Scene) : IO (Array ValueGroup) := do
+  let mask ← c.hiddenGroups.get
+  return scene.access.groups.mapIdx fun i g => { g with hidden := g.hideable && mask[i]?.getD g.hidden }
+
 /-- Keep the legend's hidden series across scenes, unless the new scene has a different number of series, when its own flags apply. -/
 private def adoptTraces (c : Chart) (scene : Scene) : IO Unit :=
   c.hidden.modify fun mask =>
@@ -522,6 +529,20 @@ private def showLegend (c : Chart) (scene : Scene) : IO Unit := do
     label.set "textContent" (if live then Legend.text row else row.name)
     button.callMethod "append" #[toJS swatch, toJS label] Unit
     c.legendEl.callMethod "append" #[toJS button] Unit
+  for (g, gi) in (← activeGroups c scene).zipIdx do
+    for row in Legend.groupRows g cursorX do
+      let entry ← newElement doc (if g.hideable then "button" else "div")
+      if g.hideable then
+        entry.callMethod "setAttribute" #[toJS "data-group", toJS (toString gi)] Unit
+        entry.callMethod "setAttribute" #[toJS "aria-pressed", toJS (toString !row.hidden)] Unit
+      else entry.set "className" "entry"
+      let swatch ← newElement doc "span"
+      swatch.set "className" "swatch"
+      (← swatch.get "style" Value).set "background" row.color
+      let label ← newElement doc "span"
+      label.set "textContent" (if live then Legend.text row else row.name)
+      entry.callMethod "append" #[toJS swatch, toJS label] Unit
+      c.legendEl.callMethod "append" #[toJS entry] Unit
 
 /-- Bring the tooltip and legend up to date with the cursor, the scene and the hidden series. -/
 private def refreshProbe (c : Chart) : IO Unit := do
@@ -624,8 +645,17 @@ private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
 private def onLegendClick (c : Chart) (event : Value) : IO Unit := do
   let target ← event.get "target" Value
   let some button ← Web.Support.optionalValue (← target.callMethod "closest" #[toJS "button"] Data) | return
-  let some index := (← button.callMethod "getAttribute" #[toJS "data-series"] String).toNat? | return
   let some scene ← c.scene.get | return
+  if ← button.callMethod "hasAttribute" #[toJS "data-group"] Bool then
+    let some index := (← button.callMethod "getAttribute" #[toJS "data-group"] String).toNat? | return
+    let groups ← activeGroups c scene
+    let some g := groups[index]? | return
+    let hidden := groups.mapIdx fun i h => if i == index then !g.hidden else h.hidden
+    c.hiddenGroups.set hidden
+    dispatch c.el "inkproof-group" (obj [("group", toJS index), ("hidden", .bool !g.hidden)])
+    refreshProbe c
+    return
+  let some index := (← button.callMethod "getAttribute" #[toJS "data-series"] String).toNat? | return
   let hidden := (Legend.toggle (← activeTraces c scene) index).map (·.hidden)
   c.hidden.set hidden
   dispatch c.el "inkproof-series" (obj [("series", toJS index), ("hidden", .bool (hidden[index]?.getD false))])

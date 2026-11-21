@@ -16,18 +16,16 @@ structure LegendRow where
   value : Option Float
   last : Bool
 
-namespace Trace
-
-/-- The point of the trace nearest `x` along x, among all its points with a position, whether or not its value is missing. -/
-def nearestPoint (t : Trace) (x : Float) : Option (Float × Float) :=
-  (t.xs.zip t.ys).foldl (init := none) fun acc p =>
+/-- The entry of `ps` whose position is nearest `x`, among those with a position; the first of equally near ones. -/
+def nearestBy {α : Type} (ps : Array (Float × α)) (x : Float) : Option (Float × α) :=
+  ps.foldl (init := none) fun acc p =>
     if p.1.isNaN then acc
     else match acc with
       | none => some p
       | some b => if (p.1 - x).abs < (b.1 - x).abs then some p else acc
 
-private theorem nearestStep_pos (x : Float) (l : List (Float × Float)) (init : Option (Float × Float))
-    (hi : ∀ b, init = some b → b.1.isNaN = false) (b : Float × Float)
+private theorem nearestStep_pos {α : Type} (x : Float) (l : List (Float × α)) (init : Option (Float × α))
+    (hi : ∀ b, init = some b → b.1.isNaN = false) (b : Float × α)
     (h : l.foldl (fun acc p =>
       if p.1.isNaN then acc
       else match acc with
@@ -51,8 +49,8 @@ private theorem nearestStep_pos (x : Float) (l : List (Float × Float)) (init : 
         · simp at hc; subst hc; simpa using hp
         · exact hi c hc
 
-private theorem nearestFold_mem (x : Float) (l : List (Float × Float)) (init : Option (Float × Float))
-    (b : Float × Float)
+private theorem nearestFold_mem {α : Type} (x : Float) (l : List (Float × α)) (init : Option (Float × α))
+    (b : Float × α)
     (h : l.foldl (fun acc p =>
       if p.1.isNaN then acc
       else match acc with
@@ -75,18 +73,36 @@ private theorem nearestFold_mem (x : Float) (l : List (Float × Float)) (init : 
           · simp at hm; subst hm; exact Or.inl (List.mem_cons_self ..)
           · exact Or.inr hm
 
-/-- The point found by `nearestPoint` is one of the trace's points. The further claim that no other point with a position is strictly nearer is not stated: `Float` has no order lemmas, so the fold's comparisons cannot be chained. -/
-theorem nearestPoint_mem (t : Trace) (x : Float) (p : Float × Float) (h : t.nearestPoint x = some p) :
-    p ∈ (t.xs.zip t.ys).toList := by
-  have := nearestFold_mem x (t.xs.zip t.ys).toList none p (by
-    unfold nearestPoint at h; rw [← Array.foldl_toList] at h; exact h)
+/-- The entry found by `nearestBy` is one of `ps`. The further claim that no other entry with a position is strictly nearer is not stated: `Float` has no order lemmas, so the fold's comparisons cannot be chained. -/
+theorem nearestBy_mem {α : Type} (ps : Array (Float × α)) (x : Float) (p : Float × α)
+    (h : nearestBy ps x = some p) : p ∈ ps.toList := by
+  have := nearestFold_mem x ps.toList none p (by
+    unfold nearestBy at h; rw [← Array.foldl_toList] at h; exact h)
   simpa using this
+
+/-- The entry found by `nearestBy` has a position. -/
+theorem nearestBy_not_nan {α : Type} (ps : Array (Float × α)) (x : Float) (p : Float × α)
+    (h : nearestBy ps x = some p) : p.1.isNaN = false :=
+  nearestStep_pos x ps.toList none (by simp) p (by
+    unfold nearestBy at h; rw [← Array.foldl_toList] at h; exact h)
+
+namespace Trace
+
+/-- The point of the trace nearest `x` along x, among all its points with a position, whether or not its value is missing. -/
+def nearestPoint (t : Trace) (x : Float) : Option (Float × Float) :=
+  nearestBy (t.xs.zip t.ys) x
+
+theorem nearestPoint_eq (t : Trace) (x : Float) : t.nearestPoint x = nearestBy (t.xs.zip t.ys) x := rfl
+
+/-- The point found by `nearestPoint` is one of the trace's points. -/
+theorem nearestPoint_mem (t : Trace) (x : Float) (p : Float × Float) (h : t.nearestPoint x = some p) :
+    p ∈ (t.xs.zip t.ys).toList :=
+  nearestBy_mem _ x p h
 
 /-- The point found by `nearestPoint` has a position. -/
 theorem nearestPoint_not_nan (t : Trace) (x : Float) (p : Float × Float) (h : t.nearestPoint x = some p) :
     p.1.isNaN = false :=
-  nearestStep_pos x (t.xs.zip t.ys).toList none (by simp) p (by
-    unfold nearestPoint at h; rw [← Array.foldl_toList] at h; exact h)
+  nearestBy_not_nan _ x p h
 
 /-- The value at the point nearest `x` along x; none when that point's value is missing. -/
 def valueAt (t : Trace) (x : Float) : Option Float :=
@@ -116,12 +132,64 @@ theorem lastValue_not_nan (t : Trace) (v : Float) (h : t.lastValue = some v) : v
 
 end Trace
 
+namespace ValueGroup
+
+/-- The index of the group's x nearest `x`, among those with a position. -/
+def nearestIndex (g : ValueGroup) (x : Float) : Option Nat :=
+  (nearestBy g.xs.zipIdx x).map (·.2)
+
+theorem nearestIndex_eq (g : ValueGroup) (x : Float) : g.nearestIndex x = (nearestBy g.xs.zipIdx x).map (·.2) := rfl
+
+/-- The index found by `nearestIndex` is that of one of the group's x positions. -/
+theorem nearestIndex_lt (g : ValueGroup) (x : Float) (i : Nat) (h : g.nearestIndex x = some i) :
+    i < g.xs.size := by
+  obtain ⟨p, hp, rfl⟩ := Option.map_eq_some_iff.mp h
+  have := Array.mem_zipIdx_iff_getElem?.mp (Array.mem_toList_iff.mp (nearestBy_mem _ x p hp))
+  exact (Array.getElem?_eq_some_iff.mp this).1
+
+/-- The group's values at x index `i`, each none where it is missing; none for all where there is no such index. -/
+def valuesAt (g : ValueGroup) (i : Option Nat) : Array (Option Float) :=
+  g.labels.mapIdx fun j _ =>
+    (i.bind fun i => g.values[i]?.bind (·[j]?)).bind fun v => if v.isNaN then none else some v
+
+theorem valuesAt_getElem? (g : ValueGroup) (i : Option Nat) (j : Nat) :
+    (g.valuesAt i)[j]? = g.labels[j]?.map fun _ =>
+      (i.bind fun i => g.values[i]?.bind (·[j]?)).bind fun v => if v.isNaN then none else some v := by
+  simp [valuesAt]
+
+theorem valuesAt_size (g : ValueGroup) (i : Option Nat) : (g.valuesAt i).size = g.labels.size := by
+  simp [valuesAt]
+
+end ValueGroup
+
 namespace Legend
 
 /-- The rows for `traces` with the cursor at data position `x`; with none each shows its series' last value. -/
 def rows (traces : Array Trace) (x : Option Float) : Array LegendRow :=
   traces.map fun t =>
     { name := t.name, color := t.color, hidden := t.hidden, value := x.elim t.lastValue t.valueAt, last := x.isNone }
+
+/-- The rows for a group of values, one for each label, at the group's x nearest the cursor at `x`, or at its last x with no cursor. -/
+def groupRows (g : ValueGroup) (x : Option Float) : Array LegendRow :=
+  let values := g.valuesAt (x.elim (if g.xs.size = 0 then none else some (g.xs.size - 1)) g.nearestIndex)
+  g.labels.mapIdx fun j label =>
+    { name := label, color := g.color, hidden := g.hidden, value := values.getD j none, last := x.isNone }
+
+theorem groupRows_size (g : ValueGroup) (x : Option Float) : (groupRows g x).size = g.labels.size := by
+  simp [groupRows]
+
+theorem groupRows_getElem? (g : ValueGroup) (x : Option Float) (j : Nat) :
+    (groupRows g x)[j]? = g.labels[j]?.map fun label =>
+      { name := label, color := g.color, hidden := g.hidden,
+        value := (g.valuesAt (x.elim (if g.xs.size = 0 then none else some (g.xs.size - 1)) g.nearestIndex)).getD j none,
+        last := x.isNone } := by
+  simp [groupRows]
+
+theorem groupRows_last (g : ValueGroup) : ∀ r ∈ groupRows g none, r.last = true := by
+  intro r hr
+  simp only [groupRows, Array.mem_mapIdx] at hr
+  obtain ⟨_, _, rfl⟩ := hr
+  rfl
 
 /-- What a row reads as: its name, then its value or a dash, marked when it is the last value. -/
 def text (r : LegendRow) : String :=

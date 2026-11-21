@@ -1,8 +1,9 @@
 structure Inkproof.Web.Access : Type
 def Inkproof.Web.Access.cursorText : Inkproof.Web.Access → Inkproof.Web.Nav → String
 theorem Inkproof.Web.Access.cursorText_eq : ∀ (a : Inkproof.Web.Access) (n : Inkproof.Web.Nav), a.cursorText n = ToString.toString (a.series[n.series]?.getD (ToString.toString "series " ++ ToString.toString (n.series + 1))) ++ ToString.toString ", point " ++ ToString.toString (n.point + 1) ++ ToString.toString " of " ++ ToString.toString a.points
+field Inkproof.Web.Access.groups : Inkproof.Web.Access → Array Inkproof.Web.ValueGroup
 field Inkproof.Web.Access.header : Inkproof.Web.Access → Array String
-constructor Inkproof.Web.Access.mk : String → Array String → Nat → Option String → Array String → Array (Array String) → Option (Inkproof.Viewport.ViewConfig Float) → Float × Float → Array Inkproof.Web.Trace → Inkproof.Web.Access
+constructor Inkproof.Web.Access.mk : String → Array String → Nat → Option String → Array String → Array (Array String) → Option (Inkproof.Viewport.ViewConfig Float) → Float × Float → Array Inkproof.Web.Trace → Array Inkproof.Web.ValueGroup → Inkproof.Web.Access
 field Inkproof.Web.Access.name : Inkproof.Web.Access → String
 field Inkproof.Web.Access.plotOrigin : Inkproof.Web.Access → Float × Float
 field Inkproof.Web.Access.points : Inkproof.Web.Access → Nat
@@ -107,6 +108,10 @@ structure Inkproof.Web.Legend.Style : Type
 field Inkproof.Web.Legend.Style.live : Inkproof.Web.Legend.Style → Bool
 constructor Inkproof.Web.Legend.Style.mk : Inkproof.Web.Legend.Placement → Bool → Inkproof.Web.Legend.Style
 field Inkproof.Web.Legend.Style.placement : Inkproof.Web.Legend.Style → Inkproof.Web.Legend.Placement
+def Inkproof.Web.Legend.groupRows : Inkproof.Web.ValueGroup → Option Float → Array Inkproof.Web.LegendRow
+theorem Inkproof.Web.Legend.groupRows_getElem? : ∀ (g : Inkproof.Web.ValueGroup) (x : Option Float) (j : Nat), (Inkproof.Web.Legend.groupRows g x)[j]? = Option.map (fun label => { name := label, color := g.color, hidden := g.hidden, value := (g.valuesAt (x.elim (if g.xs.size = 0 then Option.none else Option.some (g.xs.size - 1)) g.nearestIndex)).getD j Option.none, last := x.isNone }) g.labels[j]?
+theorem Inkproof.Web.Legend.groupRows_last : ∀ (g : Inkproof.Web.ValueGroup) (r : Inkproof.Web.LegendRow), r ∈ Inkproof.Web.Legend.groupRows g Option.none → r.last = Bool.true
+theorem Inkproof.Web.Legend.groupRows_size : ∀ (g : Inkproof.Web.ValueGroup) (x : Option Float), (Inkproof.Web.Legend.groupRows g x).size = g.labels.size
 instance Inkproof.Web.Legend.instDecidableEqPlacement : DecidableEq Inkproof.Web.Legend.Placement
 instance Inkproof.Web.Legend.instDecidableEqStyle : DecidableEq Inkproof.Web.Legend.Style
 def Inkproof.Web.Legend.instDecidableEqStyle.decEq : (x x_1 : Inkproof.Web.Legend.Style) → Decidable (x = x_1)
@@ -294,6 +299,7 @@ theorem Inkproof.Web.Trace.lastValue_not_nan : ∀ (t : Inkproof.Web.Trace) (v :
 constructor Inkproof.Web.Trace.mk : String → String → Array Float → Array Float → Bool → Inkproof.Web.Trace
 field Inkproof.Web.Trace.name : Inkproof.Web.Trace → String
 def Inkproof.Web.Trace.nearestPoint : Inkproof.Web.Trace → Float → Option (Float × Float)
+theorem Inkproof.Web.Trace.nearestPoint_eq : ∀ (t : Inkproof.Web.Trace) (x : Float), t.nearestPoint x = Inkproof.Web.nearestBy (t.xs.zip t.ys) x
 theorem Inkproof.Web.Trace.nearestPoint_mem : ∀ (t : Inkproof.Web.Trace) (x : Float) (p : Float × Float), t.nearestPoint x = Option.some p → p ∈ (t.xs.zip t.ys).toList
 theorem Inkproof.Web.Trace.nearestPoint_not_nan : ∀ (t : Inkproof.Web.Trace) (x : Float) (p : Float × Float), t.nearestPoint x = Option.some p → p.fst.isNaN = Bool.false
 def Inkproof.Web.Trace.onScreen : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Inkproof.Web.Trace → Inkproof.Web.Trace
@@ -305,6 +311,21 @@ theorem Inkproof.Web.Trace.valueAt_eq : ∀ (t : Inkproof.Web.Trace) (x : Float)
 theorem Inkproof.Web.Trace.valueAt_not_nan : ∀ (t : Inkproof.Web.Trace) (x v : Float), t.valueAt x = Option.some v → v.isNaN = Bool.false
 field Inkproof.Web.Trace.xs : Inkproof.Web.Trace → Array Float
 field Inkproof.Web.Trace.ys : Inkproof.Web.Trace → Array Float
+structure Inkproof.Web.ValueGroup : Type
+field Inkproof.Web.ValueGroup.color : Inkproof.Web.ValueGroup → String
+field Inkproof.Web.ValueGroup.hidden : Inkproof.Web.ValueGroup → Bool
+field Inkproof.Web.ValueGroup.hideable : Inkproof.Web.ValueGroup → Bool
+field Inkproof.Web.ValueGroup.labels : Inkproof.Web.ValueGroup → Array String
+constructor Inkproof.Web.ValueGroup.mk : String → String → Array String → Array Float → Array (Array Float) → Bool → Bool → Inkproof.Web.ValueGroup
+field Inkproof.Web.ValueGroup.name : Inkproof.Web.ValueGroup → String
+def Inkproof.Web.ValueGroup.nearestIndex : Inkproof.Web.ValueGroup → Float → Option Nat
+theorem Inkproof.Web.ValueGroup.nearestIndex_eq : ∀ (g : Inkproof.Web.ValueGroup) (x : Float), g.nearestIndex x = Option.map (fun x => x.snd) (Inkproof.Web.nearestBy g.xs.zipIdx x)
+theorem Inkproof.Web.ValueGroup.nearestIndex_lt : ∀ (g : Inkproof.Web.ValueGroup) (x : Float) (i : Nat), g.nearestIndex x = Option.some i → i < g.xs.size
+field Inkproof.Web.ValueGroup.values : Inkproof.Web.ValueGroup → Array (Array Float)
+def Inkproof.Web.ValueGroup.valuesAt : Inkproof.Web.ValueGroup → Option Nat → Array (Option Float)
+theorem Inkproof.Web.ValueGroup.valuesAt_getElem? : ∀ (g : Inkproof.Web.ValueGroup) (i : Option Nat) (j : Nat), (g.valuesAt i)[j]? = Option.map (fun x => (i.bind fun i => g.values[i]?.bind fun x => x[j]?).bind fun v => if v.isNaN = Bool.true then Option.none else Option.some v) g.labels[j]?
+theorem Inkproof.Web.ValueGroup.valuesAt_size : ∀ (g : Inkproof.Web.ValueGroup) (i : Option Nat), (g.valuesAt i).size = g.labels.size
+field Inkproof.Web.ValueGroup.xs : Inkproof.Web.ValueGroup → Array Float
 def Inkproof.Web.View.ofBounds : Float → Float → Float → Float → Inkproof.Viewport.View Float
 theorem Inkproof.Web.View.ofBounds_x : ∀ (xStart xEnd yStart yEnd : Float), (Inkproof.Web.View.ofBounds xStart xEnd yStart yEnd).x = { start := xStart, span := xEnd - xStart }
 theorem Inkproof.Web.View.ofBounds_y : ∀ (xStart xEnd yStart yEnd : Float), (Inkproof.Web.View.ofBounds xStart xEnd yStart yEnd).y = { start := yStart, span := yEnd - yStart }
@@ -348,5 +369,8 @@ instance Inkproof.Web.instReprNav : Repr Inkproof.Web.Nav
 def Inkproof.Web.instReprNav.repr : Inkproof.Web.Nav → Nat → Std.Format
 instance Inkproof.Web.instReprSize : Repr Inkproof.Web.Size
 def Inkproof.Web.instReprSize.repr : Inkproof.Web.Size → Nat → Std.Format
+def Inkproof.Web.nearestBy : {α : Type} → Array (Float × α) → Float → Option (Float × α)
+theorem Inkproof.Web.nearestBy_mem : ∀ {α : Type} (ps : Array (Float × α)) (x : Float) (p : Float × α), Inkproof.Web.nearestBy ps x = Option.some p → p ∈ ps.toList
+theorem Inkproof.Web.nearestBy_not_nan : ∀ {α : Type} (ps : Array (Float × α)) (x : Float) (p : Float × α), Inkproof.Web.nearestBy ps x = Option.some p → p.fst.isNaN = Bool.false
 def Inkproof.Web.showFloat : Float → String
 theorem Inkproof.Web.showFloat_eq : ∀ (f : Float), Inkproof.Web.showFloat f = if (ToString.toString f).contains '.' = Bool.true then (((ToString.toString f).dropEndWhile fun x => x == '0').dropEndWhile fun x => x == '.').toString else ToString.toString f

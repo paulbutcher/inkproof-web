@@ -732,6 +732,33 @@ test('the tooltip names the nearest visible point and the legend gives each seri
   await context.close();
 });
 
+test('the legend shows a group of values at the nearest x, or its last, and toggles only a hideable group', async () => {
+  const { page, context } = await open('/values.html');
+  await drawn(page, 1);
+  await page.evaluate(() => {
+    window.toggled = [];
+    document.getElementById('a').addEventListener('inkproof-group', e => window.toggled.push(e.detail));
+  });
+  const legend = () => page.evaluate(() =>
+    [...document.getElementById('a').shadowRoot.querySelectorAll('.legend button, .legend .entry')].map(b => b.textContent));
+  assert.deepEqual(await legend(), ['Open: 5 (last)', 'Close: 6 (last)', 'State: - (last)'], 'with no cursor the last group, a missing value as a dash');
+  await page.evaluate(() => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: rect.left + 80, clientY: rect.top + 100 }));
+  });
+  assert.deepEqual(await legend(), ['Open: 3', 'Close: 4', 'State: 8'], 'the group nearest the cursor x');
+  const kinds = () => page.evaluate(() =>
+    [...document.getElementById('a').shadowRoot.querySelectorAll('.legend button, .legend .entry')].map(e => e.tagName));
+  assert.deepEqual(await kinds(), ['BUTTON', 'BUTTON', 'DIV'], 'only the hideable group toggles');
+  await page.locator('#a .legend button').first().click();
+  assert.deepEqual(await page.evaluate(() => window.toggled), [{ group: 0, hidden: true }]);
+  assert.deepEqual(await page.evaluate(() =>
+    [...document.getElementById('a').shadowRoot.querySelectorAll('.legend button')].map(b => b.getAttribute('aria-pressed'))), ['false', 'false']);
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
 test('a static legend lists each series without values or readout, and still toggles', async () => {
   const { page, context } = await open('/probe.html');
   await drawn(page, 1);

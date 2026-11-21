@@ -134,6 +134,8 @@ structure Access where
   plotOrigin : Float × Float := (0, 0)
   /-- The series' points, which the tooltip and legend read; without them a chart has neither. -/
   traces : Array Trace := #[]
+  /-- Groups of named values per x, which the legend shows beside the series. -/
+  groups : Array ValueGroup := #[]
 
 /-- A number as people write it: no trailing zeros, and no point on a whole number. -/
 def showFloat (f : Float) : String :=
