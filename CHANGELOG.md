@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.15.1]
+
+- The generated interpreter comes from Gpu v0.13.0, so a gradient fill or stroke is drawn blended between its stops.
+
 ## [0.15.0]
 
 - A legend row shows its series' last value, marked "(last)", when the cursor is away.
