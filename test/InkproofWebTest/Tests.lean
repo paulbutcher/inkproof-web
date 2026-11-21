@@ -65,7 +65,18 @@ def dragCase : TestCase :=
     let bad := match DragMode.parse (some "zoom") with | .error _ => true | .ok _ => false
     check bad "zoom accepted"
 
+/-- A legend row over a missing value reads as a dash, never the value of a neighbouring point. -/
+def legendGapCase : TestCase :=
+  .mk "a legend value over a gap is missing" do
+    let nan := 0.0 / 0.0
+    let t : Trace := { name := "a", color := "#000", xs := #[0, 1, 2, 3], ys := #[5, nan, 7, nan] }
+    let over := t.valueAt 1.1
+    let beside := t.valueAt 2.1
+    let last := Legend.rows #[t] none
+    check (over.isNone && beside == some 7 && last.all (·.value.isNone))
+      s!"{over} {beside} {last.map (·.value)}"
+
 def tests : List TestCase :=
-  [sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase, dragCase]
+  [sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase, dragCase, legendGapCase]
 
 end InkproofWebTest

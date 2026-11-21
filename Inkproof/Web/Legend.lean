@@ -18,16 +18,101 @@ structure LegendRow where
 
 namespace Trace
 
-/-- The value of the trace at the point nearest `x` along x, if it has one. -/
+/-- The point of the trace nearest `x` along x, among all its points with a position, whether or not its value is missing. -/
+def nearestPoint (t : Trace) (x : Float) : Option (Float × Float) :=
+  (t.xs.zip t.ys).foldl (init := none) fun acc p =>
+    if p.1.isNaN then acc
+    else match acc with
+      | none => some p
+      | some b => if (p.1 - x).abs < (b.1 - x).abs then some p else acc
+
+private theorem nearestStep_pos (x : Float) (l : List (Float × Float)) (init : Option (Float × Float))
+    (hi : ∀ b, init = some b → b.1.isNaN = false) (b : Float × Float)
+    (h : l.foldl (fun acc p =>
+      if p.1.isNaN then acc
+      else match acc with
+        | none => some p
+        | some b => if (p.1 - x).abs < (b.1 - x).abs then some p else acc) init = some b) :
+    b.1.isNaN = false := by
+  induction l generalizing init with
+  | nil => exact hi b h
+  | cons p l ih =>
+    refine ih _ ?_ h
+    intro c hc
+    simp only at hc
+    split at hc
+    · exact hi c hc
+    · rename_i hp
+      cases init with
+      | none => simp at hc; subst hc; simpa using hp
+      | some d =>
+        simp only at hc
+        split at hc
+        · simp at hc; subst hc; simpa using hp
+        · exact hi c hc
+
+private theorem nearestFold_mem (x : Float) (l : List (Float × Float)) (init : Option (Float × Float))
+    (b : Float × Float)
+    (h : l.foldl (fun acc p =>
+      if p.1.isNaN then acc
+      else match acc with
+        | none => some p
+        | some b => if (p.1 - x).abs < (b.1 - x).abs then some p else acc) init = some b) :
+    b ∈ l ∨ init = some b := by
+  induction l generalizing init with
+  | nil => exact Or.inr h
+  | cons p l ih =>
+    rcases ih _ h with hm | hm
+    · exact Or.inl (List.mem_cons_of_mem _ hm)
+    · simp only at hm
+      split at hm
+      · exact Or.inr hm
+      · cases init with
+        | none => simp at hm; subst hm; exact Or.inl (List.mem_cons_self ..)
+        | some d =>
+          simp only at hm
+          split at hm
+          · simp at hm; subst hm; exact Or.inl (List.mem_cons_self ..)
+          · exact Or.inr hm
+
+/-- The point found by `nearestPoint` is one of the trace's points. The further claim that no other point with a position is strictly nearer is not stated: `Float` has no order lemmas, so the fold's comparisons cannot be chained. -/
+theorem nearestPoint_mem (t : Trace) (x : Float) (p : Float × Float) (h : t.nearestPoint x = some p) :
+    p ∈ (t.xs.zip t.ys).toList := by
+  have := nearestFold_mem x (t.xs.zip t.ys).toList none p (by
+    unfold nearestPoint at h; rw [← Array.foldl_toList] at h; exact h)
+  simpa using this
+
+/-- The point found by `nearestPoint` has a position. -/
+theorem nearestPoint_not_nan (t : Trace) (x : Float) (p : Float × Float) (h : t.nearestPoint x = some p) :
+    p.1.isNaN = false :=
+  nearestStep_pos x (t.xs.zip t.ys).toList none (by simp) p (by
+    unfold nearestPoint at h; rw [← Array.foldl_toList] at h; exact h)
+
+/-- The value at the point nearest `x` along x; none when that point's value is missing. -/
 def valueAt (t : Trace) (x : Float) : Option Float :=
-  (Nearest.find .x #[{ t with hidden := false }] x 0).map (·.y)
+  (t.nearestPoint x).bind fun p => if p.2.isNaN then none else some p.2
 
 theorem valueAt_eq (t : Trace) (x : Float) :
-    t.valueAt x = (Nearest.find .x #[{ t with hidden := false }] x 0).map (·.y) := rfl
+    t.valueAt x = (t.nearestPoint x).bind fun p => if p.2.isNaN then none else some p.2 := rfl
 
-theorem valueAt_none_iff (t : Trace) (x : Float) :
-    t.valueAt x = none ↔ Nearest.candidates #[{ t with hidden := false }] = [] := by
-  simp [valueAt, Nearest.find_none_iff]
+theorem valueAt_not_nan (t : Trace) (x v : Float) (h : t.valueAt x = some v) : v.isNaN = false := by
+  unfold valueAt at h
+  cases hn : t.nearestPoint x with
+  | none => simp [hn] at h
+  | some p => simp only [hn, Option.bind_some] at h; split at h <;> simp_all
+
+/-- The last value of the trace, none when it is missing. -/
+def lastValue (t : Trace) : Option Float :=
+  t.ys.back?.bind fun y => if y.isNaN then none else some y
+
+theorem lastValue_eq (t : Trace) :
+    t.lastValue = t.ys.back?.bind fun y => if y.isNaN then none else some y := rfl
+
+theorem lastValue_not_nan (t : Trace) (v : Float) (h : t.lastValue = some v) : v.isNaN = false := by
+  unfold lastValue at h
+  cases hb : t.ys.back? with
+  | none => simp [hb] at h
+  | some y => simp only [hb, Option.bind_some] at h; split at h <;> simp_all
 
 end Trace
 
@@ -36,7 +121,7 @@ namespace Legend
 /-- The rows for `traces` with the cursor at data position `x`; with none each shows its series' last value. -/
 def rows (traces : Array Trace) (x : Option Float) : Array LegendRow :=
   traces.map fun t =>
-    { name := t.name, color := t.color, hidden := t.hidden, value := x.elim t.ys.back? t.valueAt, last := x.isNone }
+    { name := t.name, color := t.color, hidden := t.hidden, value := x.elim t.lastValue t.valueAt, last := x.isNone }
 
 /-- What a row reads as: its name, then its value or a dash, marked when it is the last value. -/
 def text (r : LegendRow) : String :=
@@ -59,7 +144,7 @@ theorem rows_size (traces : Array Trace) (x : Option Float) : (rows traces x).si
 theorem rows_getElem? (traces : Array Trace) (x : Option Float) (i : Nat) :
     (rows traces x)[i]? =
       traces[i]?.map fun t =>
-        { name := t.name, color := t.color, hidden := t.hidden, value := x.elim t.ys.back? t.valueAt, last := x.isNone } := by
+        { name := t.name, color := t.color, hidden := t.hidden, value := x.elim t.lastValue t.valueAt, last := x.isNone } := by
   simp [rows]
 
 theorem rows_last (traces : Array Trace) : ∀ r ∈ rows traces none, r.last = true := by
