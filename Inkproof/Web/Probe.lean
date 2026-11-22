@@ -90,22 +90,19 @@ end Metric
 
 namespace Nearest
 
-private def pick (d : Candidate → Float) (b c : Candidate) : Candidate := if d b ≤ d c then b else c
-
 /-- The first candidate of least distance. -/
-def argmin (d : Candidate → Float) : List Candidate → Option Candidate
-  | [] => none
-  | a :: t => some (t.foldl (pick d) a)
+def argmin (d : Candidate → Float) (cs : List Candidate) : Option Candidate :=
+  cs.minOn? d
 
-private theorem foldl_pick (d : Candidate → Float) (ordered : ∀ c, Float.IsOrdered (d c)) (t : List Candidate) :
-    ∀ a : Candidate, (t.foldl (pick d) a ∈ a :: t) ∧ ∀ k ∈ a :: t, d (t.foldl (pick d) a) ≤ d k := by
+private theorem foldl_minOn (d : Candidate → Float) (ordered : ∀ c, Float.IsOrdered (d c)) (t : List Candidate) :
+    ∀ a : Candidate, (t.foldl (minOn d) a ∈ a :: t) ∧ ∀ k ∈ a :: t, d (t.foldl (minOn d) a) ≤ d k := by
   induction t with
   | nil => intro a; simpa using float_le_linear.1 _ (ordered a)
   | cons j t ih =>
     intro a
-    obtain ⟨hmem, hle⟩ := ih (pick d a j)
-    have hpick : d (pick d a j) ≤ d a ∧ d (pick d a j) ≤ d j := by
-      unfold pick
+    obtain ⟨hmem, hle⟩ := ih (minOn d a j)
+    have hpick : d (minOn d a j) ≤ d a ∧ d (minOn d a j) ≤ d j := by
+      rw [minOn_eq_ite]
       split
       · rename_i h
         exact ⟨float_le_linear.1 _ (ordered a), h⟩
@@ -114,7 +111,7 @@ private theorem foldl_pick (d : Candidate → Float) (ordered : ∀ c, Float.IsO
         rcases float_le_linear.2.2.2 _ _ (ordered a) (ordered j) with h' | h'
         · exact absurd h' h
         · exact h'
-    have hpm : pick d a j = a ∨ pick d a j = j := by unfold pick; split <;> simp
+    have hpm : minOn d a j = a ∨ minOn d a j = j := minOn_eq_or
     refine ⟨?_, ?_⟩
     · have := hmem
       simp only [List.mem_cons] at this ⊢
@@ -137,8 +134,8 @@ theorem argmin_mem (d : Candidate → Float) (ordered : ∀ c, Float.IsOrdered (
   cases cs with
   | nil => simp [argmin] at h
   | cons a t =>
-    simp only [argmin, Option.some.injEq] at h
-    exact h ▸ (foldl_pick d ordered t a).1
+    simp only [argmin, List.minOn?, Option.some.injEq] at h
+    exact h ▸ (foldl_minOn d ordered t a).1
 
 /-- No candidate is nearer than the one chosen. -/
 theorem argmin_least (d : Candidate → Float) (ordered : ∀ c, Float.IsOrdered (d c)) (cs : List Candidate) (r : Candidate)
@@ -146,11 +143,11 @@ theorem argmin_least (d : Candidate → Float) (ordered : ∀ c, Float.IsOrdered
   cases cs with
   | nil => simp [argmin] at h
   | cons a t =>
-    simp only [argmin, Option.some.injEq] at h
-    exact h ▸ (foldl_pick d ordered t a).2
+    simp only [argmin, List.minOn?, Option.some.injEq] at h
+    exact h ▸ (foldl_minOn d ordered t a).2
 
 theorem argmin_eq_none (d : Candidate → Float) (cs : List Candidate) : argmin d cs = none ↔ cs = [] := by
-  cases cs <;> simp [argmin]
+  cases cs <;> simp [argmin, List.minOn?]
 
 /-- The points of the visible traces that have a position, in order. -/
 def candidates (traces : Array Trace) : List Candidate :=

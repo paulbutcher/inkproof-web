@@ -23,6 +23,11 @@ Lasm's browser bindings (`Lasm.JS.Web`, `Lasm.UI`) ship with `@lasm/cli` and are
 - A scene carries an `Access`: the chart's name, series, point count, optional summary, a data table and the view configuration. The element becomes focusable (`tabindex` 0 unless set), takes the name as `aria-label` and the summary as `aria-description`, and holds the data in a visually hidden table; the `show-table` attribute swaps the canvas for it.
 - Keys map to a `Command` (pure, native), and `Nav.apply` applies it: zoom and pan go through Viewport's `View.step`, so keys and pointer share one path. The host reports changes as `inkproof-view` and `inkproof-cursor` events and announces them in a polite live region; the application answers a view change with `Host.setScene`, which replaces the scene but keeps the `Nav` (its cursor clamped to the new data) and the GPU state, and a page's own controls issue a `Command` with `Host.apply`. Keys with modifiers, and keys the chart does not use, are left to the browser.
 
+## Lean core declarations
+
+- `Nearest.argmin` is `List.minOn?`, and `argmin_mem` and `argmin_eq_none` follow from it. `argmin_least` keeps its own induction: core's order lemmas need `IsLinearPreorder Float`, which NaN rules out, so they hold only under the `IsOrdered` hypothesis, which core cannot state. `minOn?` is a plain fold, so it adds nothing to the Lasm build.
+- `nearestBy` is not `minOn?` over the filtered list: it replaces the best on a strict `<`, `minOn` on `¬ best ≤ new`, and the two differ when a distance is NaN (a NaN or infinite `x`).
+
 ## Building an application
 
 An application's `package.json` depends on `gpu-js` (the module `inkproof-gpu-js`, a copy of the interpreter the pinned Gpu release generates, written by `scripts/gpu-module.sh <dir>` and checked by the tests) and on `shim/inkproof-web-element` (the shim below), both by `file:` path. Lasm resolves them through Vite and `@lasm/cli/vite`; a static `lasm build` cannot resolve npm modules. `test/` is a working example.
