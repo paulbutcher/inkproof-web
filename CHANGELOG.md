@@ -1,9 +1,12 @@
 # Changelog
 
+## [0.19.1]
+
+- `Nearest.argmin` is defined by Lean core's `List.minOn?`, with its signature unchanged.
+
 ## [0.19.0]
 
 - A group can give text in place of numbers (`ValueGroup.words`), such as a state at the cursor's x, shown in the legend with a dash where there is none.
-- `Nearest.argmin` is defined by Lean core's `List.minOn?`, with its signature unchanged.
 
 ## [0.18.0]
 
