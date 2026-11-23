@@ -100,21 +100,40 @@ theorem Inkproof.Web.Group.parse_none : Inkproof.Web.Group.parse Option.none = E
 def Inkproof.Web.Group.toggled : Option String → Option String → Option String
 theorem Inkproof.Web.Group.toggled_linked : ∀ (name : String) (named : Option String), Inkproof.Web.Group.toggled (Option.some name) named = Option.none
 theorem Inkproof.Web.Group.toggled_unlinked : ∀ (named : Option String), Inkproof.Web.Group.toggled Option.none named = named
+inductive Inkproof.Web.Legend.Layout : Type
+constructor Inkproof.Web.Legend.Layout.horizontal : Inkproof.Web.Legend.Layout
+def Inkproof.Web.Legend.Layout.ofNat : Nat → Inkproof.Web.Legend.Layout
+theorem Inkproof.Web.Legend.Layout.ofNat_ctorIdx : ∀ (x : Inkproof.Web.Legend.Layout), Inkproof.Web.Legend.Layout.ofNat x.ctorIdx = x
+constructor Inkproof.Web.Legend.Layout.vertical : Inkproof.Web.Legend.Layout
 inductive Inkproof.Web.Legend.Placement : Type
+constructor Inkproof.Web.Legend.Placement.belowCenter : Inkproof.Web.Legend.Placement
+constructor Inkproof.Web.Legend.Placement.belowLeft : Inkproof.Web.Legend.Placement
+constructor Inkproof.Web.Legend.Placement.belowRight : Inkproof.Web.Legend.Placement
+constructor Inkproof.Web.Legend.Placement.bottomLeft : Inkproof.Web.Legend.Placement
+constructor Inkproof.Web.Legend.Placement.bottomRight : Inkproof.Web.Legend.Placement
+def Inkproof.Web.Legend.Placement.isBelow : Inkproof.Web.Legend.Placement → Bool
+theorem Inkproof.Web.Legend.Placement.isBelow_eq : ∀ (p : Inkproof.Web.Legend.Placement), p.isBelow = Bool.true ↔ p = Inkproof.Web.Legend.Placement.belowLeft ∨ p = Inkproof.Web.Legend.Placement.belowCenter ∨ p = Inkproof.Web.Legend.Placement.belowRight
 def Inkproof.Web.Legend.Placement.ofNat : Nat → Inkproof.Web.Legend.Placement
 theorem Inkproof.Web.Legend.Placement.ofNat_ctorIdx : ∀ (x : Inkproof.Web.Legend.Placement), Inkproof.Web.Legend.Placement.ofNat x.ctorIdx = x
-constructor Inkproof.Web.Legend.Placement.overlay : Inkproof.Web.Legend.Placement
+constructor Inkproof.Web.Legend.Placement.topLeft : Inkproof.Web.Legend.Placement
+constructor Inkproof.Web.Legend.Placement.topRight : Inkproof.Web.Legend.Placement
 structure Inkproof.Web.Legend.Style : Type
+field Inkproof.Web.Legend.Style.layout : Inkproof.Web.Legend.Style → Inkproof.Web.Legend.Layout
 field Inkproof.Web.Legend.Style.live : Inkproof.Web.Legend.Style → Bool
-constructor Inkproof.Web.Legend.Style.mk : Inkproof.Web.Legend.Placement → Bool → Inkproof.Web.Legend.Style
+constructor Inkproof.Web.Legend.Style.mk : Inkproof.Web.Legend.Placement → Inkproof.Web.Legend.Layout → Bool → Bool → Bool → Inkproof.Web.Legend.Style
 field Inkproof.Web.Legend.Style.placement : Inkproof.Web.Legend.Style → Inkproof.Web.Legend.Placement
+field Inkproof.Web.Legend.Style.showX : Inkproof.Web.Legend.Style → Bool
+field Inkproof.Web.Legend.Style.showY : Inkproof.Web.Legend.Style → Bool
 def Inkproof.Web.Legend.groupRows : Inkproof.Web.ValueGroup → Option Float → Array Inkproof.Web.LegendRow
 theorem Inkproof.Web.Legend.groupRows_getElem? : ∀ (g : Inkproof.Web.ValueGroup) (x : Option Float) (j : Nat), (Inkproof.Web.Legend.groupRows g x)[j]? = Option.map (fun label => { name := label, color := g.color, hidden := g.hidden, value := (g.valuesAt (x.elim (if g.xs.size = 0 then Option.none else Option.some (g.xs.size - 1)) g.nearestIndex)).getD j Option.none, last := x.isNone, word := (g.wordsAt (x.elim (if g.xs.size = 0 then Option.none else Option.some (g.xs.size - 1)) g.nearestIndex)).getD j Option.none }) g.labels[j]?
 theorem Inkproof.Web.Legend.groupRows_last : ∀ (g : Inkproof.Web.ValueGroup) (r : Inkproof.Web.LegendRow), r ∈ Inkproof.Web.Legend.groupRows g Option.none → r.last = Bool.true
 theorem Inkproof.Web.Legend.groupRows_size : ∀ (g : Inkproof.Web.ValueGroup) (x : Option Float), (Inkproof.Web.Legend.groupRows g x).size = g.labels.size
+instance Inkproof.Web.Legend.instDecidableEqLayout : DecidableEq Inkproof.Web.Legend.Layout
 instance Inkproof.Web.Legend.instDecidableEqPlacement : DecidableEq Inkproof.Web.Legend.Placement
 instance Inkproof.Web.Legend.instDecidableEqStyle : DecidableEq Inkproof.Web.Legend.Style
 def Inkproof.Web.Legend.instDecidableEqStyle.decEq : (x x_1 : Inkproof.Web.Legend.Style) → Decidable (x = x_1)
+instance Inkproof.Web.Legend.instReprLayout : Repr Inkproof.Web.Legend.Layout
+def Inkproof.Web.Legend.instReprLayout.repr : Inkproof.Web.Legend.Layout → Nat → Std.Format
 instance Inkproof.Web.Legend.instReprPlacement : Repr Inkproof.Web.Legend.Placement
 def Inkproof.Web.Legend.instReprPlacement.repr : Inkproof.Web.Legend.Placement → Nat → Std.Format
 instance Inkproof.Web.Legend.instReprStyle : Repr Inkproof.Web.Legend.Style
@@ -127,22 +146,39 @@ theorem Inkproof.Web.Legend.live_on : Inkproof.Web.Legend.live (Option.some "on"
 theorem Inkproof.Web.Legend.live_static : Inkproof.Web.Legend.live (Option.some "static bottom") = Bool.false
 def Inkproof.Web.Legend.parse : Option String → Except String Bool
 def Inkproof.Web.Legend.parseStyle : Option String → Except String (Option Inkproof.Web.Legend.Style)
-theorem Inkproof.Web.Legend.parseStyle_bottom : Inkproof.Web.Legend.parseStyle (Option.some "bottom") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.below, live := Bool.true })
-theorem Inkproof.Web.Legend.parseStyle_bottom_static : Inkproof.Web.Legend.parseStyle (Option.some "bottom static") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.below, live := Bool.false })
-theorem Inkproof.Web.Legend.parseStyle_empty : Inkproof.Web.Legend.parseStyle (Option.some "") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.overlay, live := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_below_center : (Inkproof.Web.Legend.parseStyle (Option.some "below-center")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.belowCenter, layout := Inkproof.Web.Legend.Layout.horizontal, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_below_left : (Inkproof.Web.Legend.parseStyle (Option.some "below-left")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.belowLeft, layout := Inkproof.Web.Legend.Layout.horizontal, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_below_right : (Inkproof.Web.Legend.parseStyle (Option.some "below-right")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.belowRight, layout := Inkproof.Web.Legend.Layout.horizontal, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_bottom : Inkproof.Web.Legend.parseStyle (Option.some "bottom") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.belowRight, layout := Inkproof.Web.Legend.Layout.horizontal, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_bottom_left : (Inkproof.Web.Legend.parseStyle (Option.some "bottom-left")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.bottomLeft, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_bottom_right : (Inkproof.Web.Legend.parseStyle (Option.some "bottom-right")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.bottomRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_bottom_static : Inkproof.Web.Legend.parseStyle (Option.some "bottom static") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.belowRight, layout := Inkproof.Web.Legend.Layout.horizontal, live := Bool.false, showX := Bool.false, showY := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_centred_row : (Inkproof.Web.Legend.parseStyle (Option.some "static below-center horizontal")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.belowCenter, layout := Inkproof.Web.Legend.Layout.horizontal, live := Bool.false, showX := Bool.false, showY := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_column_below : (Inkproof.Web.Legend.parseStyle (Option.some "below-left vertical no-x")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.belowLeft, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.true, showX := Bool.false, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_conflict : Inkproof.Web.Legend.parseStyle (Option.some "top-left below-left") = Except.error (Inkproof.Web.Legend.badLegend✝ "top-left below-left")
+theorem Inkproof.Web.Legend.parseStyle_empty : Inkproof.Web.Legend.parseStyle (Option.some "") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_horizontal : (Inkproof.Web.Legend.parseStyle (Option.some "horizontal")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.horizontal, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_no_x : (Inkproof.Web.Legend.parseStyle (Option.some "no-x")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.true, showX := Bool.false, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_no_y : (Inkproof.Web.Legend.parseStyle (Option.some "no-y")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.true, showX := Bool.true, showY := Bool.false })
 theorem Inkproof.Web.Legend.parseStyle_none : Inkproof.Web.Legend.parseStyle Option.none = Except.ok Option.none
 theorem Inkproof.Web.Legend.parseStyle_off : Inkproof.Web.Legend.parseStyle (Option.some "off") = Except.ok Option.none
-theorem Inkproof.Web.Legend.parseStyle_on : Inkproof.Web.Legend.parseStyle (Option.some "on") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.overlay, live := Bool.true })
-theorem Inkproof.Web.Legend.parseStyle_on_static : Inkproof.Web.Legend.parseStyle (Option.some "on static") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.overlay, live := Bool.false })
-theorem Inkproof.Web.Legend.parseStyle_other : ∀ (s : String), s ≠ "" → s ≠ "on" → s ≠ "off" → s ≠ "bottom" → s ≠ "static" → s ≠ "on static" → s ≠ "static on" → s ≠ "static bottom" → s ≠ "bottom static" → Inkproof.Web.Legend.parseStyle (Option.some s) = Except.error (ToString.toString "attribute legend is \"" ++ ToString.toString s ++ ToString.toString "\", expected on, bottom, static, static bottom or off")
-theorem Inkproof.Web.Legend.parseStyle_static : Inkproof.Web.Legend.parseStyle (Option.some "static") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.overlay, live := Bool.false })
-theorem Inkproof.Web.Legend.parseStyle_static_bottom : Inkproof.Web.Legend.parseStyle (Option.some "static bottom") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.below, live := Bool.false })
-theorem Inkproof.Web.Legend.parseStyle_static_on : Inkproof.Web.Legend.parseStyle (Option.some "static on") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.overlay, live := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_on : Inkproof.Web.Legend.parseStyle (Option.some "on") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_on_static : Inkproof.Web.Legend.parseStyle (Option.some "on static") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.false, showX := Bool.false, showY := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_static : Inkproof.Web.Legend.parseStyle (Option.some "static") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.false, showX := Bool.false, showY := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_static_bottom : Inkproof.Web.Legend.parseStyle (Option.some "static bottom") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.belowRight, layout := Inkproof.Web.Legend.Layout.horizontal, live := Bool.false, showX := Bool.false, showY := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_static_on : Inkproof.Web.Legend.parseStyle (Option.some "static on") = Except.ok (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.false, showX := Bool.false, showY := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_top_left : (Inkproof.Web.Legend.parseStyle (Option.some "top-left")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.topLeft, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_top_right : (Inkproof.Web.Legend.parseStyle (Option.some "top-right")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_unknown : ∀ (s : String), s = "sideways" → Inkproof.Web.Legend.parseStyle (Option.some s) = Except.error (Inkproof.Web.Legend.badLegend✝ s)
+theorem Inkproof.Web.Legend.parseStyle_vertical : (Inkproof.Web.Legend.parseStyle (Option.some "vertical")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.true, showX := Bool.true, showY := Bool.true })
+theorem Inkproof.Web.Legend.parseStyle_x : (Inkproof.Web.Legend.parseStyle (Option.some "static x")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.false, showX := Bool.true, showY := Bool.false })
+theorem Inkproof.Web.Legend.parseStyle_y : (Inkproof.Web.Legend.parseStyle (Option.some "static y")).toOption = Option.some (Option.some { placement := Inkproof.Web.Legend.Placement.topRight, layout := Inkproof.Web.Legend.Layout.vertical, live := Bool.false, showX := Bool.false, showY := Bool.true })
 theorem Inkproof.Web.Legend.parse_bottom : Inkproof.Web.Legend.parse (Option.some "bottom") = Except.ok Bool.true
 theorem Inkproof.Web.Legend.parse_empty : Inkproof.Web.Legend.parse (Option.some "") = Except.ok Bool.true
 theorem Inkproof.Web.Legend.parse_none : Inkproof.Web.Legend.parse Option.none = Except.ok Bool.false
-def Inkproof.Web.Legend.readout : Float → Option Float → String
-theorem Inkproof.Web.Legend.readout_eq : ∀ (x : Float) (y : Option Float), Inkproof.Web.Legend.readout x y = match y with | Option.some y => ToString.toString "x: " ++ ToString.toString (Inkproof.Web.showFloat x) ++ ToString.toString ", y: " ++ ToString.toString (Inkproof.Web.showFloat y) | Option.none => ToString.toString "x: " ++ ToString.toString (Inkproof.Web.showFloat x)
+def Inkproof.Web.Legend.readout : Bool → Bool → Float → Option Float → Option String
+theorem Inkproof.Web.Legend.readout_eq : ∀ (showX showY : Bool) (x : Float) (y : Option Float), Inkproof.Web.Legend.readout showX showY x y = match showX, showY, y with | Bool.true, Bool.true, Option.some y => Option.some (ToString.toString "x: " ++ ToString.toString (Inkproof.Web.showFloat x) ++ ToString.toString ", y: " ++ ToString.toString (Inkproof.Web.showFloat y)) | Bool.true, x_1, x_2 => Option.some (ToString.toString "x: " ++ ToString.toString (Inkproof.Web.showFloat x)) | Bool.false, Bool.true, Option.some y => Option.some (ToString.toString "y: " ++ ToString.toString (Inkproof.Web.showFloat y)) | Bool.false, x, x_1 => Option.none
+theorem Inkproof.Web.Legend.readout_none : ∀ (x : Float) (y : Option Float), Inkproof.Web.Legend.readout Bool.false Bool.false x y = Option.none
 def Inkproof.Web.Legend.rows : Array Inkproof.Web.Trace → Option Float → Array Inkproof.Web.LegendRow
 theorem Inkproof.Web.Legend.rows_getElem? : ∀ (traces : Array Inkproof.Web.Trace) (x : Option Float) (i : Nat), (Inkproof.Web.Legend.rows traces x)[i]? = Option.map (fun t => { name := t.name, color := t.color, hidden := t.hidden, value := x.elim t.lastValue t.valueAt, last := x.isNone }) traces[i]?
 theorem Inkproof.Web.Legend.rows_last : ∀ (traces : Array Inkproof.Web.Trace) (r : Inkproof.Web.LegendRow), r ∈ Inkproof.Web.Legend.rows traces Option.none → r.last = Bool.true

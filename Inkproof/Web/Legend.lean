@@ -212,17 +212,6 @@ theorem groupRows_last (g : ValueGroup) : ∀ r ∈ groupRows g none, r.last = t
 def text (r : LegendRow) : String :=
   s!"{r.name}: {r.word.getD ((r.value.map showFloat).getD "-")}{if r.last then " (last)" else ""}"
 
-/-- What the cursor readout says: the x position, and the y position when the pointer is over the chart. -/
-def readout (x : Float) (y : Option Float) : String :=
-  match y with
-  | some y => s!"x: {showFloat x}, y: {showFloat y}"
-  | none => s!"x: {showFloat x}"
-
-theorem readout_eq (x : Float) (y : Option Float) :
-    readout x y = match y with
-      | some y => s!"x: {showFloat x}, y: {showFloat y}"
-      | none => s!"x: {showFloat x}" := rfl
-
 theorem rows_size (traces : Array Trace) (x : Option Float) : (rows traces x).size = traces.size := by
   simp [rows]
 
@@ -238,65 +227,205 @@ theorem rows_last (traces : Array Trace) : ∀ r ∈ rows traces none, r.last = 
 theorem text_eq (r : LegendRow) :
     text r = s!"{r.name}: {r.word.getD ((r.value.map showFloat).getD "-")}{if r.last then " (last)" else ""}" := rfl
 
-/-- Where the legend sits: over the plot at its top right, or below the plot at the right, in room of its own. -/
+/-- Where the legend sits: over the plot at one of its corners, or below the plot, in room of its own, aligned left, centred or right. -/
 inductive Placement where
-  | overlay
-  | below
+  | topLeft
+  | topRight
+  | bottomLeft
+  | bottomRight
+  | belowLeft
+  | belowCenter
+  | belowRight
   deriving DecidableEq, Repr
 
-/-- A legend's placement, and whether its entries show values (`live`) or only each series' colour and name. -/
+/-- Whether the legend lies below the plot rather than over it. -/
+def Placement.isBelow : Placement → Bool
+  | .belowLeft | .belowCenter | .belowRight => true
+  | .topLeft | .topRight | .bottomLeft | .bottomRight => false
+
+theorem Placement.isBelow_eq (p : Placement) :
+    p.isBelow = true ↔ (p = .belowLeft ∨ p = .belowCenter ∨ p = .belowRight) := by
+  cases p <;> simp [Placement.isBelow]
+
+/-- Whether the entries are listed in a column or in a row, which wraps onto further lines. -/
+inductive Layout where
+  | vertical
+  | horizontal
+  deriving DecidableEq, Repr
+
+/-- A legend's placement and layout, whether its entries show values (`live`) or only each series' colour and name, and whether the cursor's x and y positions are shown. -/
 structure Style where
   placement : Placement
+  layout : Layout
   live : Bool
+  showX : Bool
+  showY : Bool
   deriving DecidableEq, Repr
 
-/-- Validate the raw `legend` attribute: a missing one or `off` shows none; `on` (or empty) overlays the plot, `bottom` goes below it and `static` leaves out the values, and `static` combines with either placement, as `static bottom`. -/
+private structure Choices where
+  placement : Option Placement := none
+  layout : Option Layout := none
+  live : Bool := true
+  showX : Option Bool := none
+  showY : Option Bool := none
+
+private def pick {α : Type} [BEq α] (old : Option α) (new : α) : Option (Option α) :=
+  match old with
+  | none => some (some new)
+  | some o => if o == new then some old else none
+
+private def forms : String :=
+  "on, off, static, bottom, top-left, top-right, bottom-left, bottom-right, below-left, below-center, below-right, vertical, horizontal, x, y, no-x or no-y, each form at most once and no two of a kind"
+
+private def badLegend (raw : String) : String :=
+  s!"attribute legend is \"{raw}\", expected {forms}"
+
+private def choose (c : Choices) : String → Option Choices
+  | "on" => some c
+  | "static" => some { c with live := false }
+  | "top-left" => (pick c.placement .topLeft).map ({ c with placement := · })
+  | "top-right" => (pick c.placement .topRight).map ({ c with placement := · })
+  | "bottom-left" => (pick c.placement .bottomLeft).map ({ c with placement := · })
+  | "bottom-right" => (pick c.placement .bottomRight).map ({ c with placement := · })
+  | "below-left" => (pick c.placement .belowLeft).map ({ c with placement := · })
+  | "below-center" => (pick c.placement .belowCenter).map ({ c with placement := · })
+  | "below-right" | "bottom" => (pick c.placement .belowRight).map ({ c with placement := · })
+  | "vertical" => (pick c.layout .vertical).map ({ c with layout := · })
+  | "horizontal" => (pick c.layout .horizontal).map ({ c with layout := · })
+  | "x" => (pick c.showX true).map ({ c with showX := · })
+  | "no-x" => (pick c.showX false).map ({ c with showX := · })
+  | "y" => (pick c.showY true).map ({ c with showY := · })
+  | "no-y" => (pick c.showY false).map ({ c with showY := · })
+  | _ => none
+
+private def finish (c : Choices) : Style :=
+  let placement := c.placement.getD .topRight
+  { placement
+    layout := c.layout.getD (if placement.isBelow then .horizontal else .vertical)
+    live := c.live
+    showX := c.showX.getD c.live
+    showY := c.showY.getD c.live }
+
+/-- The words of `s`, which are separated by spaces. -/
+private def words (s : String) : List String :=
+  (s.toList.foldr (fun c (acc : List (List Char)) =>
+    match c, acc with
+    | ' ', [] => []
+    | ' ', [] :: _ => acc
+    | ' ', _ => [] :: acc
+    | c, [] => [[c]]
+    | c, w :: ws => (c :: w) :: ws) []).filter (· ≠ []) |>.map String.ofList
+
+/-- Validate the raw `legend` attribute: a missing one or `off` shows none. Otherwise it is a list of words in any order, each kind at most once: `on` (or empty) for the default, which overlays the plot at its top right; a placement, which is `top-left`, `top-right`, `bottom-left` or `bottom-right` over the plot, or `below-left`, `below-center` or `below-right` (`bottom` for the last) in room of its own below it; a layout, `vertical` or `horizontal`, which is a column over the plot and a row below it unless given; `static` to leave out the values; and `x`, `y`, `no-x` or `no-y` to show or hide each cursor position, which are shown when the values are. -/
 def parseStyle : Option String → Except String (Option Style)
   | none | some "off" => .ok none
-  | some "" | some "on" => .ok (some { placement := .overlay, live := true })
-  | some "bottom" => .ok (some { placement := .below, live := true })
-  | some "static" | some "on static" | some "static on" => .ok (some { placement := .overlay, live := false })
-  | some "static bottom" | some "bottom static" => .ok (some { placement := .below, live := false })
-  | some s => .error s!"attribute legend is \"{s}\", expected on, bottom, static, static bottom or off"
+  | some s =>
+    match (words s).foldlM choose {} with
+    | some c => .ok (some (finish c))
+    | none => .error (badLegend s)
 
 theorem parseStyle_none : parseStyle none = .ok none := rfl
 
 theorem parseStyle_off : parseStyle (some "off") = .ok none := rfl
 
-theorem parseStyle_empty : parseStyle (some "") = .ok (some { placement := .overlay, live := true }) := by
+theorem parseStyle_empty :
+    parseStyle (some "") = .ok (some { placement := .topRight, layout := .vertical, live := true, showX := true, showY := true }) := by
   rfl
 
-theorem parseStyle_on : parseStyle (some "on") = .ok (some { placement := .overlay, live := true }) := by
+theorem parseStyle_on :
+    parseStyle (some "on") = .ok (some { placement := .topRight, layout := .vertical, live := true, showX := true, showY := true }) := by
   rfl
 
-theorem parseStyle_bottom : parseStyle (some "bottom") = .ok (some { placement := .below, live := true }) := by
+theorem parseStyle_bottom :
+    parseStyle (some "bottom") = .ok (some { placement := .belowRight, layout := .horizontal, live := true, showX := true, showY := true }) := by
   rfl
 
-theorem parseStyle_static : parseStyle (some "static") = .ok (some { placement := .overlay, live := false }) := by
+theorem parseStyle_static :
+    parseStyle (some "static") = .ok (some { placement := .topRight, layout := .vertical, live := false, showX := false, showY := false }) := by
   rfl
 
 theorem parseStyle_static_bottom :
-    parseStyle (some "static bottom") = .ok (some { placement := .below, live := false }) := by
+    parseStyle (some "static bottom") = .ok (some { placement := .belowRight, layout := .horizontal, live := false, showX := false, showY := false }) := by
   rfl
 
 theorem parseStyle_on_static :
-    parseStyle (some "on static") = .ok (some { placement := .overlay, live := false }) := by
+    parseStyle (some "on static") = .ok (some { placement := .topRight, layout := .vertical, live := false, showX := false, showY := false }) := by
   rfl
 
 theorem parseStyle_static_on :
-    parseStyle (some "static on") = .ok (some { placement := .overlay, live := false }) := by
+    parseStyle (some "static on") = .ok (some { placement := .topRight, layout := .vertical, live := false, showX := false, showY := false }) := by
   rfl
 
 theorem parseStyle_bottom_static :
-    parseStyle (some "bottom static") = .ok (some { placement := .below, live := false }) := by
+    parseStyle (some "bottom static") = .ok (some { placement := .belowRight, layout := .horizontal, live := false, showX := false, showY := false }) := by
   rfl
 
-theorem parseStyle_other (s : String) (h1 : s ≠ "") (h2 : s ≠ "on") (h3 : s ≠ "off") (h4 : s ≠ "bottom")
-    (h5 : s ≠ "static") (h6 : s ≠ "on static") (h7 : s ≠ "static on") (h8 : s ≠ "static bottom")
-    (h9 : s ≠ "bottom static") :
-    parseStyle (some s) = .error s!"attribute legend is \"{s}\", expected on, bottom, static, static bottom or off" := by
-  unfold parseStyle
-  split <;> simp_all
+theorem parseStyle_top_left : (parseStyle (some "top-left")).toOption = some (some
+    { placement := .topLeft, layout := .vertical, live := true, showX := true, showY := true }) := by
+  rfl
+
+theorem parseStyle_top_right : (parseStyle (some "top-right")).toOption = some (some
+    { placement := .topRight, layout := .vertical, live := true, showX := true, showY := true }) := by
+  rfl
+
+theorem parseStyle_bottom_left : (parseStyle (some "bottom-left")).toOption = some (some
+    { placement := .bottomLeft, layout := .vertical, live := true, showX := true, showY := true }) := by
+  rfl
+
+theorem parseStyle_bottom_right : (parseStyle (some "bottom-right")).toOption = some (some
+    { placement := .bottomRight, layout := .vertical, live := true, showX := true, showY := true }) := by
+  rfl
+
+theorem parseStyle_below_left : (parseStyle (some "below-left")).toOption = some (some
+    { placement := .belowLeft, layout := .horizontal, live := true, showX := true, showY := true }) := by
+  rfl
+
+theorem parseStyle_below_center : (parseStyle (some "below-center")).toOption = some (some
+    { placement := .belowCenter, layout := .horizontal, live := true, showX := true, showY := true }) := by
+  rfl
+
+theorem parseStyle_below_right : (parseStyle (some "below-right")).toOption = some (some
+    { placement := .belowRight, layout := .horizontal, live := true, showX := true, showY := true }) := by
+  rfl
+
+theorem parseStyle_vertical : (parseStyle (some "vertical")).toOption = some (some
+    { placement := .topRight, layout := .vertical, live := true, showX := true, showY := true }) := by
+  rfl
+
+theorem parseStyle_horizontal : (parseStyle (some "horizontal")).toOption = some (some
+    { placement := .topRight, layout := .horizontal, live := true, showX := true, showY := true }) := by
+  rfl
+
+theorem parseStyle_x : (parseStyle (some "static x")).toOption = some (some
+    { placement := .topRight, layout := .vertical, live := false, showX := true, showY := false }) := by
+  rfl
+
+theorem parseStyle_y : (parseStyle (some "static y")).toOption = some (some
+    { placement := .topRight, layout := .vertical, live := false, showX := false, showY := true }) := by
+  rfl
+
+theorem parseStyle_no_x : (parseStyle (some "no-x")).toOption = some (some
+    { placement := .topRight, layout := .vertical, live := true, showX := false, showY := true }) := by
+  rfl
+
+theorem parseStyle_no_y : (parseStyle (some "no-y")).toOption = some (some
+    { placement := .topRight, layout := .vertical, live := true, showX := true, showY := false }) := by
+  rfl
+
+theorem parseStyle_centred_row : (parseStyle (some "static below-center horizontal")).toOption = some (some
+    { placement := .belowCenter, layout := .horizontal, live := false, showX := false, showY := false }) := by
+  rfl
+
+theorem parseStyle_column_below : (parseStyle (some "below-left vertical no-x")).toOption = some (some
+    { placement := .belowLeft, layout := .vertical, live := true, showX := false, showY := true }) := by
+  rfl
+
+theorem parseStyle_unknown (s : String) (h : s = "sideways") :
+    parseStyle (some s) = .error (badLegend s) := by
+  subst h; rfl
+
+theorem parseStyle_conflict : parseStyle (some "top-left below-left") = .error (badLegend "top-left below-left") := by
+  rfl
 
 /-- Whether the raw `legend` attribute shows a legend. -/
 def parse (raw : Option String) : Except String Bool :=
@@ -309,6 +438,24 @@ theorem parse_empty : parse (some "") = .ok true := by
 
 theorem parse_bottom : parse (some "bottom") = .ok true := by
   rfl
+
+/-- What the cursor readout says: the x position if `showX`, and the y position if `showY` and the pointer is over the chart; none when it says nothing. -/
+def readout (showX showY : Bool) (x : Float) (y : Option Float) : Option String :=
+  match showX, showY, y with
+  | true, true, some y => some s!"x: {showFloat x}, y: {showFloat y}"
+  | true, _, _ => some s!"x: {showFloat x}"
+  | false, true, some y => some s!"y: {showFloat y}"
+  | false, _, _ => none
+
+theorem readout_eq (showX showY : Bool) (x : Float) (y : Option Float) :
+    readout showX showY x y = match showX, showY, y with
+      | true, true, some y => some s!"x: {showFloat x}, y: {showFloat y}"
+      | true, _, _ => some s!"x: {showFloat x}"
+      | false, true, some y => some s!"y: {showFloat y}"
+      | false, _, _ => none := rfl
+
+theorem readout_none (x : Float) (y : Option Float) : readout false false x y = none := by
+  simp [readout]
 
 /-- Whether the raw `legend` attribute asks for the values: false for `static`, and for no legend. -/
 def live (raw : Option String) : Bool :=

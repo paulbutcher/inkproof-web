@@ -784,6 +784,69 @@ test('a static legend lists each series without values or readout, and still tog
   await context.close();
 });
 
+test('a legend lies where its placement says, lists entries in a row or a column, and shows the readouts it is asked for', async () => {
+  const { page, context } = await open('/probe.html');
+  await drawn(page, 1);
+  const boxes = legend => page.evaluate(async legend => {
+    const el = document.getElementById('a');
+    el.setAttribute('legend', legend);
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 50))));
+    const root = el.shadowRoot;
+    const box = e => { const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
+    return { host: box(el), canvas: box(root.querySelector('canvas')), legend: box(root.querySelector('.legend')),
+      entries: [...root.querySelectorAll('.legend button')].map(box) };
+  }, legend);
+  const near = (a, b, what) => assert.ok(Math.abs(a - b) <= 1, `${what}: ${a} is not ${b}`);
+  const corners = { 'top-left': [true, true], 'top-right': [true, false], 'bottom-left': [false, true], 'bottom-right': [false, false] };
+  for (const [place, [top, left]] of Object.entries(corners)) {
+    for (const layout of ['vertical', 'horizontal']) {
+      const b = await boxes(`${place} ${layout}`);
+      near(top ? b.legend.top : b.legend.bottom, top ? b.canvas.top : b.canvas.bottom, `${place} ${layout} vertical edge`);
+      near(left ? b.legend.left : b.legend.right, left ? b.canvas.left : b.canvas.right, `${place} ${layout} horizontal edge`);
+    }
+  }
+  for (const [place, at] of [['below-left', 0], ['below-center', 0.5], ['below-right', 1]]) {
+    for (const layout of ['vertical', 'horizontal']) {
+      const b = await boxes(`${place} ${layout}`);
+      assert.ok(b.legend.top >= b.canvas.bottom - 0.5, `${place} ${layout}: the legend overlaps the plot`);
+      assert.ok(b.legend.bottom <= b.host.bottom + 0.5, `${place} ${layout}: the legend leaves the element`);
+      const used = b.entries.length ? [Math.min(...b.entries.map(e => e.left)), Math.max(...b.entries.map(e => e.right))] : [0, 0];
+      const free = (b.host.right - b.host.left) - (used[1] - used[0]);
+      if (layout === 'horizontal') near(used[0] - b.host.left, free * at, `${place} row alignment`);
+      else {
+        const e = b.entries[0];
+        near(e.left - b.host.left, ((b.host.right - b.host.left) - (e.right - e.left)) * at, `${place} column alignment`);
+      }
+    }
+  }
+  const row = await boxes('below-center horizontal');
+  near(row.entries[0].top, row.entries[1].top, 'a row puts entries at one vertical position');
+  const column = await boxes('below-left vertical');
+  near(column.entries[0].left, column.entries[1].left, 'a column puts entries at one horizontal position');
+  assert.ok(column.entries[1].top > column.entries[0].top, 'a column stacks its entries');
+  const readout = async legend => {
+    await page.evaluate(legend => {
+      const el = document.getElementById('a');
+      el.setAttribute('legend', legend);
+      const rect = el.getBoundingClientRect();
+      el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: rect.left + 100, clientY: rect.top + 100 }));
+    }, legend);
+    await settle(page);
+    return page.evaluate(() => document.getElementById('a').shadowRoot.querySelector('.legend .readout')?.textContent ?? null);
+  };
+  assert.match(await readout('static x'), /^x: [^,]+$/, 'a static legend shows x when asked');
+  assert.match(await readout('static y'), /^y: /, 'a static legend shows y when asked');
+  assert.match(await readout('no-y'), /^x: [^,]+$/, 'a live legend leaves y out');
+  assert.match(await readout('no-x'), /^y: /, 'a live legend leaves x out');
+  assert.equal(await readout('no-x no-y'), null, 'no readout line when both are hidden');
+  assert.match(await readout('below-center'), /^x: .*, y: /, 'both by default');
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await page.evaluate(() => document.getElementById('a').setAttribute('legend', 'sideways'));
+  await page.waitForFunction(() => window.errors.length > 0);
+  assert.match(await page.evaluate(() => window.errors[0]), /expected on, off, static, bottom/);
+  await context.close();
+});
+
 test('the cursor, tooltip and legend work over a trace of half a million points', async () => {
   const { page, context } = await open('/huge.html');
   await drawn(page, 1);

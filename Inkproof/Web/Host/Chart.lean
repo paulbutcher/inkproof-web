@@ -126,9 +126,8 @@ private structure Chart where
   cursorMode : IO.Ref CursorMode
   cursorDotted : IO.Ref Bool
   tooltipMode : IO.Ref (Option Metric)
-  legendOn : IO.Ref Bool
-  /-- Whether the legend shows values and the cursor readout, or only each series' colour and name. -/
-  legendLive : IO.Ref Bool
+  /-- The legend's style, none when it shows no legend. -/
+  legendStyle : IO.Ref (Option Legend.Style)
   /-- Which series the legend has hidden, by index. -/
   hidden : IO.Ref (Array Bool)
   /-- Which hideable value groups the legend has hidden, by index. -/
@@ -331,10 +330,14 @@ private partial def watchRatio (c : Chart) (after : IO Unit) : IO Unit := do
 private def styles : String :=
   ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host{touch-action:none}" ++
   ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:nowrap;padding:2px 6px;background:#fff;border:1px solid #888;font:12px sans-serif}" ++
-  ".legend{position:absolute;top:0;right:0;display:flex;flex-direction:column;font:12px sans-serif}.legend button,.legend .entry{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit}.legend button{cursor:pointer}" ++
-  ":host([legend~=bottom]){display:flex;flex-direction:column}:host([legend~=bottom]) canvas{flex:1 1 0;min-height:0;height:auto}" ++
-  ":host([legend~=bottom]) .legend{position:static;flex:none;flex-direction:row;justify-content:flex-end;align-items:center;gap:12px;height:20px}" ++
-  ".legend .readout{text-align:right}.legend button[aria-pressed=false]{opacity:0.4}.swatch{display:inline-block;width:10px;height:10px}" ++
+  ".legend{position:absolute;top:0;right:0;display:flex;font:12px sans-serif}.legend button,.legend .entry{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit}.legend button{cursor:pointer}" ++
+  ".legend[data-layout=vertical]{flex-direction:column}.legend[data-layout=horizontal]{flex-direction:row;flex-wrap:wrap;align-items:center;gap:0 12px;max-width:100%}" ++
+  ".legend[data-place=top-left]{top:0;right:auto;left:0}.legend[data-place=bottom-left]{top:auto;right:auto;bottom:0;left:0}.legend[data-place=bottom-right]{top:auto;bottom:0;right:0}" ++
+  ":host([data-legend-below]){display:flex;flex-direction:column}:host([data-legend-below]) canvas{flex:1 1 0;min-height:0;height:auto}" ++
+  ".legend[data-place^=below]{position:static;flex:none;min-height:20px}" ++
+  ".legend[data-layout=horizontal][data-place=below-left]{justify-content:flex-start}.legend[data-layout=horizontal][data-place=below-center]{justify-content:center}.legend[data-layout=horizontal][data-place=below-right]{justify-content:flex-end}" ++
+  ".legend[data-layout=vertical][data-place=below-left]{align-items:flex-start}.legend[data-layout=vertical][data-place=below-center]{align-items:center}.legend[data-layout=vertical][data-place=below-right]{align-items:flex-end}" ++
+  ".legend .readout{text-align:right}.legend[data-place$=left] .readout{text-align:left}.legend button[aria-pressed=false]{opacity:0.4}.swatch{display:inline-block;width:10px;height:10px}" ++
   ".hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}" ++
   ":host([show-table]) canvas{display:none}:host([show-table]) .hidden:not([aria-live]){position:static;width:100%;height:auto;overflow:auto;clip-path:none}"
 
@@ -375,7 +378,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipMode := ← IO.mkRef none, legendOn := ← IO.mkRef false, legendLive := ← IO.mkRef true, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipMode := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -505,18 +508,38 @@ private def showTooltip (c : Chart) (scene : Scene) : IO Unit := do
     | none => off
   | _, _ => off
 
+private def placeName : Legend.Placement → String
+  | .topLeft => "top-left"
+  | .topRight => "top-right"
+  | .bottomLeft => "bottom-left"
+  | .bottomRight => "bottom-right"
+  | .belowLeft => "below-left"
+  | .belowCenter => "below-center"
+  | .belowRight => "below-right"
+
+/-- Take up a legend style: the stylesheet places the legend by the attributes this sets on it and on the element. -/
+private def setLegendStyle (c : Chart) (style : Option Legend.Style) : IO Unit := do
+  c.legendStyle.set style
+  let below := style.any (·.placement.isBelow)
+  if below then c.el.callMethod "setAttribute" #[toJS "data-legend-below", toJS ""] Unit
+  else c.el.callMethod "removeAttribute" #[toJS "data-legend-below"] Unit
+  if let some style := style then
+    c.legendEl.callMethod "setAttribute" #[toJS "data-place", toJS (placeName style.placement)] Unit
+    c.legendEl.callMethod "setAttribute" #[toJS "data-layout", toJS (if style.layout == .vertical then "vertical" else "horizontal")] Unit
+
 private def showLegend (c : Chart) (scene : Scene) : IO Unit := do
   let doc ← (← global).get "document"
   c.legendEl.callMethod "replaceChildren" #[] Unit
-  unless (← c.legendOn.get) do return
-  let live ← c.legendLive.get
-  let cursor ← if live then c.cursor.get else pure none
+  let some style ← c.legendStyle.get | return
+  let live := style.live
+  let cursor ← if live || style.showX || style.showY then c.cursor.get else pure none
   let cursorX := cursor.map (·.1)
   if let some (x, y) := cursor then
-    let readout ← newElement doc "div"
-    readout.set "className" "readout"
-    readout.set "textContent" (Legend.readout x y)
-    c.legendEl.callMethod "append" #[toJS readout] Unit
+    if let some text := Legend.readout style.showX style.showY x y then
+      let readout ← newElement doc "div"
+      readout.set "className" "readout"
+      readout.set "textContent" text
+      c.legendEl.callMethod "append" #[toJS readout] Unit
   let rows := Legend.rows (← activeTraces c scene) cursorX
   for (row, i) in rows.zipIdx do
     let button ← newElement doc "button"
@@ -728,12 +751,11 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   | .error message, _, _, _, _, _ | _, .error message, _, _, _, _ | _, _, .error message, _, _, _ | _, _, _, .error message, _, _
   | _, _, _, _, .error message, _ | _, _, _, _, _, .error message => fail c message []
   | .ok attrs, .ok box, .ok mode, .ok group, .ok cursor, .ok select =>
-    match Metric.parse tooltipName, Legend.parse legendName with
+    match Metric.parse tooltipName, Legend.parseStyle legendName with
     | .error message, _ | _, .error message => fail c message []
     | .ok tooltip, .ok legend =>
       c.tooltipMode.set tooltip
-      c.legendOn.set legend
-      c.legendLive.set (Legend.live legendName)
+      setLegendStyle c legend
     c.cursorMode.set cursor
     c.cursorDotted.set dotted.isSome
     c.selectMode.set select
@@ -924,12 +946,11 @@ private def recursor (c : Chart) (value : Option String) : IO Unit := do
 
 /-- A change of `tooltip` or `legend` redraws them without reloading the chart. -/
 private def reprobe (c : Chart) (tooltip legend : Option String) : IO Unit := do
-  match Metric.parse tooltip, Legend.parse legend with
+  match Metric.parse tooltip, Legend.parseStyle legend with
   | .error message, _ | _, .error message => fail c message []
   | .ok t, .ok l =>
     c.tooltipMode.set t
-    c.legendOn.set l
-    c.legendLive.set (Legend.live legend)
+    setLegendStyle c l
     refreshProbe c
 
 /-- A change of `select` starts or stops the chart's selecting without reloading it; stopping drops its band. -/
