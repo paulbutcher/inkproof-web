@@ -1,12 +1,19 @@
 # Changelog
 
-## [0.21.0]
+## [0.22.0]
 
 - The `cursor` attribute is a list of words: lines (`x`, `y`, `xy`), `dotted`, markers on each series (`markers`, `nearest-marker`), their fill (`filled`, `outline`) and size (`6px`); `CursorStyle.parse` replaces `CursorMode.parse`, `MarkerMode.parse` and `MarkerStyle.parse`.
 - The `interaction` attribute is a list of words: `wheel-zoom`, `wheel-ctrl`, `no-wheel`, `touch`, `no-touch`, `drag-pan`, `drag-box`, `no-drag`, `box-x`, `box-y`, `box-xy`, `box-auto`, `select-x` and the least box drag (`4px`); `Interaction.parse` replaces `BoxConfig.parse`, `DragMode.parse`, `WheelMode.parse`, `TouchMode.parse` and `SelectMode.parse`.
 - The attributes `cursor-dotted`, `markers`, `marker-size`, `marker-fill`, `wheel`, `touch`, `drag`, `box-zoom`, `box-min` and `select` are removed; two words for one choice, or an unknown word, is reported as `inkproof-error`.
+
+## [0.21.0]
+
+- The `wheel` (`zoom`, `ctrl`, `off`), `touch` (`on`, `off`) and `drag` (`off`) attributes turn each input on or off.
 - A chart passes unused wheel, touch and drag input to the browser.
 - A chart with no view or a range selector no longer blocks touch scrolling.
+- `WheelMode` and `TouchMode` are the pure parts of the new attributes.
+- The `markers` attribute (`off`, `all`, `nearest`) draws a marker on each series at the cursor.
+- `marker-size` sizes the markers and `marker-fill` fills or outlines them.
 - `Trace.hollow` marks a series whose markers are hollow, which the cursor marker fills.
 
 ## [0.20.0]
