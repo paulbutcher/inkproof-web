@@ -523,9 +523,9 @@ test('the data position under the pointer is reported, and nothing is while it i
 test('replacing the scene keeps the view, and a reset returns to home', async () => {
   const { page, context, messages } = await open('/replacing.html');
   await drawn(page, 1);
+  const n = await page.evaluate(() => window.draws.length);
   await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200 }]]);
   const first = await lastView(page);
-  const n = await page.evaluate(() => window.draws.length);
   await drawn(page, n + 1);
   await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200 }]]);
   const second = await lastView(page);
