@@ -5,8 +5,10 @@ The browser host of Inkproof: a custom element that draws a chart on a shared We
 ## Requiring it
 
 ```lean
-require «inkproof-web» from git "https://github.com/paulbutcher/inkproof-web" @ "v0.4.8"
+require «inkproof-web» from git "https://github.com/paulbutcher/inkproof-web" @ "vX.Y.Z"
 ```
+
+Use the latest release tag in place of `vX.Y.Z`; `CHANGELOG.md` lists the releases. `lakefile.lean` records the versions of the libraries this one depends on.
 
 Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser target; the rest build natively. See `DESIGN.md`.
 
