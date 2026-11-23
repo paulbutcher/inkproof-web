@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.24.1]
+
+- The README's `require` example names no version.
+
 ## [0.24.0]
 
 - `showFloat` is written through Core's `Decimal.trimZeros`, and `showFloat_eq` is proved from it.
