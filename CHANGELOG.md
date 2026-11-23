@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.24.0]
+
+- `showFloat` is written through Core's `Decimal.trimZeros`, and `showFloat_eq` is proved from it.
+
 ## [0.23.0]
 
 - The `number-format` attribute is a list of words (`en`, `de`, `fr`, `compact`, and decimals such as `2dp`) that sets how the legend, its readout and the tooltip write numbers; `Legend.text`, `Legend.readout`, `Legend.tooltip`, `Tooltip.single` and `Tooltip.sharedText` take the format, and `showNumber` writes one number.
