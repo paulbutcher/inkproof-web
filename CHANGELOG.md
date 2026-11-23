@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.20.0]
+
+- The `legend` attribute is a list of words: placement, layout (row or column), `static`, and which cursor readouts show (`x`, `y`, `no-x`, `no-y`); existing values are unchanged.
+
 ## [0.19.1]
 
 - `Nearest.argmin` is defined by Lean core's `List.minOn?`, with its signature unchanged.
