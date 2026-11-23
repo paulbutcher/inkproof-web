@@ -55,15 +55,11 @@ def plot : ViewConfig Float :=
   let axis : Interval.Config Float := ⟨300, 1, 1000, ⟨0, 100⟩, 2, 0.1⟩
   ⟨axis, axis⟩
 
-def boxMinCase : TestCase :=
-  .mk "a zero box-min is refused" do
-    let zero := match BoxConfig.parse none (some "0") with | .error _ => true | .ok _ => false
-    check zero "zero accepted"
-
-def dragCase : TestCase :=
-  .mk "an unknown drag value is refused" do
-    let bad := match DragMode.parse (some "zoom") with | .error _ => true | .ok _ => false
-    check bad "zoom accepted"
+def interactionErrorCase : TestCase :=
+  .mk "conflicting, unknown and zero interaction words are reported" do
+    let bad (v : String) := match Interaction.parse (some v) with | .error _ => true | .ok _ => false
+    check (bad "wheel-zoom no-wheel" && bad "no-drag no-drag" && bad "drag-pan sideways" && bad "0px" && bad "4")
+      "a bad interaction was accepted"
 
 /-- A legend row over a missing value reads as a dash, never the value of a neighbouring point. -/
 def legendGapCase : TestCase :=
@@ -131,12 +127,21 @@ def markerNearestCase : TestCase :=
     let near (y : Option Float) := (Markers.atCursor .nearest {} markerConfig view ts 25 y).map (·.series)
     check (near (some 65) == #[1] && near (some 35) == #[0] && near none == #[0]) s!"{near (some 65)} {near (some 35)} {near none}"
 
-def markerAttrCase : TestCase :=
-  .mk "marker attributes are validated" do
-    let bad := (match MarkerMode.parse (some "some") with | .error _ => true | .ok _ => false) &&
-      (match MarkerStyle.parse (some "0") none with | .error _ => true | .ok _ => false) &&
-      (match MarkerStyle.parse none (some "hollow") with | .error _ => true | .ok _ => false)
-    check bad "a bad value was accepted"
+def facetSizeCase : TestCase :=
+  .mk "pixel words set the marker size and the least box drag" do
+    let marker := match CursorStyle.parse (some "markers 10px outline") with
+      | .ok c => c.marker.size == 10 && !c.marker.filled && c.markers == .all
+      | .error _ => false
+    let box := match Interaction.parse (some "drag-box 12px box-y") with
+      | .ok i => i.box.minDistance == 12 && (match i.box.axes with | .y => true | _ => false) && i.drag == .box
+      | .error _ => false
+    check (marker && box) s!"marker {marker} box {box}"
+
+def cursorErrorCase : TestCase :=
+  .mk "conflicting, unknown and zero cursor words are reported" do
+    let bad (v : String) := match CursorStyle.parse (some v) with | .error _ => true | .ok _ => false
+    check (bad "x xy" && bad "markers nearest-marker" && bad "filled outline" && bad "6px 8px" && bad "0px" && bad "hollow")
+      "a bad cursor was accepted"
 
 /-- Wherever the anchor and however far the offset, a tooltip that fits in the chart lies inside it. -/
 def tooltipPlaceCase : TestCase :=
@@ -161,6 +166,6 @@ def tooltipParseCase : TestCase :=
     check (bad "shared xy" && bad "x xy" && bad "top-left top-right" && bad "12 13" && bad "wide" && offset) "tooltip words"
 
 def tests : List TestCase :=
-  [markerCase, markerHollowCase, markerNearestCase, markerAttrCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase, dragCase, legendGapCase]
+  [markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase]
 
 end InkproofWebTest

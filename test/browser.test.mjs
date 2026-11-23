@@ -881,6 +881,21 @@ test('a legend lies where its placement says, lists entries in a row or a column
   await context.close();
 });
 
+test('a conflicting or unknown word in cursor or interaction is reported, not defaulted', async () => {
+  const { page, context } = await open('/probe.html');
+  await drawn(page, 1);
+  const report = async (name, value) => {
+    await page.evaluate(([n, v]) => { window.errors.length = 0; document.getElementById('a').setAttribute(n, v); }, [name, value]);
+    await page.waitForFunction(() => window.errors.length > 0);
+    return page.evaluate(() => window.errors[0]);
+  };
+  assert.match(await report('interaction', 'wheel-zoom no-wheel'), /two words for the wheel/);
+  assert.match(await report('interaction', 'sideways'), /unknown word "sideways"/);
+  assert.match(await report('cursor', 'x xy'), /two words for the lines/);
+  assert.match(await report('cursor', 'dotty'), /unknown word "dotty"/);
+  await context.close();
+});
+
 test('the cursor, tooltip and legend work over a trace of half a million points', async () => {
   const { page, context } = await open('/huge.html');
   await drawn(page, 1);

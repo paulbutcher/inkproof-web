@@ -29,24 +29,6 @@ theorem zooms_ctrl (ctrl cmd : Bool) : WheelMode.ctrl.zooms ctrl cmd = (ctrl || 
 
 theorem zooms_off (ctrl cmd : Bool) : WheelMode.off.zooms ctrl cmd = false := rfl
 
-/-- Validate the raw `wheel` value. A missing one is `zoom`. -/
-def parse : Option String → Except String WheelMode
-  | none | some "zoom" => .ok .zoom
-  | some "ctrl" => .ok .ctrl
-  | some "off" => .ok .off
-  | some s => .error s!"attribute wheel is \"{s}\", expected zoom, ctrl or off"
-
-theorem parse_none : parse none = .ok .zoom := rfl
-
-theorem parse_ctrl : parse (some "ctrl") = .ok .ctrl := rfl
-
-theorem parse_off : parse (some "off") = .ok .off := rfl
-
-theorem parse_invalid (s : String) (h : s ≠ "zoom" ∧ s ≠ "ctrl" ∧ s ≠ "off") : ∃ e, parse (some s) = .error e := by
-  obtain ⟨h₁, h₂, h₃⟩ := h
-  unfold parse
-  split <;> first | exact ⟨_, rfl⟩ | simp_all
-
 end WheelMode
 
 /-- Whether a chart uses touch gestures (a finger drag and a two-finger pinch) or leaves them to the browser. -/
@@ -56,21 +38,6 @@ inductive TouchMode where
   deriving DecidableEq
 
 namespace TouchMode
-
-/-- Validate the raw `touch` value. A missing one is `on`. -/
-def parse : Option String → Except String TouchMode
-  | none | some "on" => .ok .on
-  | some "off" => .ok .off
-  | some s => .error s!"attribute touch is \"{s}\", expected on or off"
-
-theorem parse_none : parse none = .ok .on := rfl
-
-theorem parse_off : parse (some "off") = .ok .off := rfl
-
-theorem parse_invalid (s : String) (h : s ≠ "on" ∧ s ≠ "off") : ∃ e, parse (some s) = .error e := by
-  obtain ⟨h₁, h₂⟩ := h
-  unfold parse
-  split <;> first | exact ⟨_, rfl⟩ | simp_all
 
 end TouchMode
 

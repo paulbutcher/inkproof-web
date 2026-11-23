@@ -19,6 +19,9 @@ import Inkproof.Web.SceneState
 import Inkproof.Web.Probe
 import Inkproof.Web.Legend
 import Inkproof.Web.Markers
+import Inkproof.Web.CursorStyle
+import Inkproof.Web.Facet
+import Inkproof.Web.Interaction
 import Inkproof.Web.Tooltip
 
 /-! # Inkproof.Web -/

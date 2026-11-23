@@ -17,24 +17,6 @@ inductive MarkerMode where
 
 namespace MarkerMode
 
-/-- Validate the raw `markers` value. A missing one draws no markers. -/
-def parse : Option String → Except String MarkerMode
-  | none | some "off" => .ok .off
-  | some "all" => .ok .all
-  | some "nearest" => .ok .nearest
-  | some s => .error s!"attribute markers is \"{s}\", expected off, all or nearest"
-
-theorem parse_none : parse none = .ok .off := rfl
-
-theorem parse_all : parse (some "all") = .ok .all := rfl
-
-theorem parse_nearest : parse (some "nearest") = .ok .nearest := rfl
-
-theorem parse_invalid (s : String) (h : s ≠ "off" ∧ s ≠ "all" ∧ s ≠ "nearest") : ∃ e, parse (some s) = .error e := by
-  obtain ⟨h₁, h₂, h₃⟩ := h
-  unfold parse
-  split <;> first | exact ⟨_, rfl⟩ | simp_all
-
 end MarkerMode
 
 /-- How a cursor marker looks: its diameter in pixels, and whether it is filled or an outline. -/
@@ -43,28 +25,6 @@ structure MarkerStyle where
   filled : Bool := true
 
 namespace MarkerStyle
-
-/-- Validate the raw `marker-size` and `marker-fill` values. A missing one is the default; an unrecognised or zero one is an error. -/
-def parse (size fill : Option String) : Except String MarkerStyle := do
-  let size ← match size with
-    | none => pure 6
-    | some s => match s.toNat? with
-      | some n => if n == 0 then throw "attribute marker-size is 0, expected a positive number of pixels" else pure n.toFloat
-      | none => throw s!"attribute marker-size is \"{s}\", expected a whole number of pixels"
-  let filled ← match fill with
-    | none | some "filled" => pure true
-    | some "outline" => pure false
-    | some s => throw s!"attribute marker-fill is \"{s}\", expected filled or outline"
-  return { size, filled }
-
-theorem parse_default : ∃ s, parse none none = .ok s ∧ s.size = 6 ∧ s.filled = true := ⟨_, rfl, rfl, rfl⟩
-
-theorem parse_size (s : String) (n : Nat) (h : s.toNat? = some n) (hn : n ≠ 0) :
-    ∃ m, parse (some s) none = .ok m ∧ m.size = n.toFloat ∧ m.filled = true := by
-  simp [parse, h, hn]
-  exact ⟨_, rfl, rfl, rfl⟩
-
-theorem parse_outline : ∃ s, parse none (some "outline") = .ok s ∧ s.filled = false := ⟨_, rfl, rfl⟩
 
 end MarkerStyle
 

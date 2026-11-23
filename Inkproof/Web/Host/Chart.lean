@@ -17,6 +17,8 @@ import Inkproof.Web.Box
 import Inkproof.Web.Cursor
 import Inkproof.Web.Legend
 import Inkproof.Web.Markers
+import Inkproof.Web.CursorStyle
+import Inkproof.Web.Interaction
 import Inkproof.Web.Tooltip
 import Inkproof.Web.Group
 import Inkproof.Web.Input
@@ -782,45 +784,36 @@ private def joinGroup (c : Chart) : IO Unit := do
   let some name ← c.group.get | return
   if let some (p, _, nav) := (← peers name).find? (·.1.id != c.id) then followFrom p (← groupView p nav)
 
+private def applyCursorStyle (c : Chart) (style : CursorStyle) : IO Unit := do
+  c.cursorMode.set style.lines
+  c.cursorDotted.set style.dotted
+  c.markerMode.set style.markers
+  c.markerStyle.set style.marker
+
+private def applyInteraction (c : Chart) (i : Interaction) : IO Unit := do
+  c.wheelMode.set i.wheel
+  c.touchMode.set i.touch
+  c.dragMode.set i.drag
+  c.boxConfig.set i.box
+  c.selectMode.set i.select
+
 private def load (c : Chart) (loader : Loader) : Async Unit := do
   let src ← getAttr c.el "src"
   let level ← getAttr c.el "log-level"
-  let boxAxes ← getAttr c.el "box-zoom"
-  let boxMin ← getAttr c.el "box-min"
-  let drag ← getAttr c.el "drag"
-  let wheelName ← getAttr c.el "wheel"
-  let touchName ← getAttr c.el "touch"
   let groupName ← getAttr c.el "group"
   let cursorName ← getAttr c.el "cursor"
-  let dotted ← getAttr c.el "cursor-dotted"
-  let markersName ← getAttr c.el "markers"
-  let markerSize ← getAttr c.el "marker-size"
-  let markerFill ← getAttr c.el "marker-fill"
+  let interactionName ← getAttr c.el "interaction"
   let tooltipName ← getAttr c.el "tooltip"
   let legendName ← getAttr c.el "legend"
-  let selectName ← getAttr c.el "select"
-  match ChartAttrs.parse src level, BoxConfig.parse boxAxes boxMin, DragMode.parse drag, Group.parse groupName, CursorMode.parse cursorName,
-      SelectMode.parse selectName with
+  match ChartAttrs.parse src level, Group.parse groupName, CursorStyle.parse cursorName, Interaction.parse interactionName,
+      Tooltip.parse tooltipName, Legend.parseStyle legendName with
   | .error message, _, _, _, _, _ | _, .error message, _, _, _, _ | _, _, .error message, _, _, _ | _, _, _, .error message, _, _
   | _, _, _, _, .error message, _ | _, _, _, _, _, .error message => fail c message []
-  | .ok attrs, .ok box, .ok mode, .ok group, .ok cursor, .ok select =>
-    match Tooltip.parse tooltipName, Legend.parseStyle legendName, WheelMode.parse wheelName, TouchMode.parse touchName with
-    | .error message, _, _, _ | _, .error message, _, _ | _, _, .error message, _ | _, _, _, .error message => fail c message []
-    | .ok tooltip, .ok legend, .ok wheel, .ok touch =>
-      c.tooltipStyle.set tooltip
-      setLegendStyle c legend
-      c.wheelMode.set wheel
-      c.touchMode.set touch
-    match MarkerMode.parse markersName, MarkerStyle.parse markerSize markerFill with
-    | .error message, _ | _, .error message => fail c message []
-    | .ok markers, .ok style =>
-      c.markerMode.set markers
-      c.markerStyle.set style
-    c.cursorMode.set cursor
-    c.cursorDotted.set dotted.isSome
-    c.selectMode.set select
-    c.boxConfig.set box
-    c.dragMode.set mode
+  | .ok attrs, .ok group, .ok cursor, .ok interaction, .ok tooltip, .ok legend =>
+    c.tooltipStyle.set tooltip
+    setLegendStyle c legend
+    applyCursorStyle c cursor
+    applyInteraction c interaction
     c.group.set group
     if let some l := attrs.logLevel then setThreshold l
     c.generation.modify (· + 1)
@@ -1000,19 +993,10 @@ private def regroup (c : Chart) (value : Option String) : IO Unit := do
 
 /-- A change of `cursor` redraws the chart without reloading it. -/
 private def recursor (c : Chart) (value : Option String) : IO Unit := do
-  match CursorMode.parse value with
+  match CursorStyle.parse value with
   | .error message => fail c message []
-  | .ok mode =>
-    c.cursorMode.set mode
-    invalidate c
-
-/-- A change of `markers`, `marker-size` or `marker-fill` redraws the chart without reloading it. -/
-private def remark (c : Chart) : IO Unit := do
-  match MarkerMode.parse (← getAttr c.el "markers"), MarkerStyle.parse (← getAttr c.el "marker-size") (← getAttr c.el "marker-fill") with
-  | .error message, _ | _, .error message => fail c message []
-  | .ok mode, .ok style =>
-    c.markerMode.set mode
-    c.markerStyle.set style
+  | .ok style =>
+    applyCursorStyle c style
     invalidate c
 
 /-- A change of `tooltip` or `legend` redraws them without reloading the chart. -/
@@ -1024,28 +1008,18 @@ private def reprobe (c : Chart) (tooltip legend : Option String) : IO Unit := do
     setLegendStyle c l
     refreshProbe c
 
-/-- A change of `select` starts or stops the chart's selecting without reloading it; stopping drops its band. -/
-private def reselect (c : Chart) (value : Option String) : IO Unit := do
-  match SelectMode.parse value with
+/-- A change of `interaction` takes effect for the next gesture, without reloading the chart; a selection that is no longer wanted loses its band. -/
+private def reinput (c : Chart) (value : Option String) : IO Unit := do
+  match Interaction.parse value with
   | .error message => fail c message []
-  | .ok mode =>
-    c.selectMode.set mode
+  | .ok i =>
+    applyInteraction c i
     c.selectDrag.set none
-    syncTouch c
-    if mode == .off then applyBand c none
-    invalidate c
-
-/-- A change of `wheel`, `touch` or `drag` takes effect for the next gesture, without reloading the chart. -/
-private def reinput (c : Chart) (wheel touch drag : Option String) : IO Unit := do
-  match WheelMode.parse wheel, TouchMode.parse touch, DragMode.parse drag with
-  | .error message, _, _ | _, .error message, _ | _, _, .error message => fail c message []
-  | .ok w, .ok t, .ok d =>
-    c.wheelMode.set w
-    c.touchMode.set t
-    c.dragMode.set d
     c.pointers.set #[]
     c.boxStart.set none
     syncTouch c
+    if i.select == .off then applyBand c none
+    invalidate c
 
 private def changed (loader : Loader) (args : Array Data) : Async Unit := do
   if let some c ← chartOf args then
@@ -1053,21 +1027,15 @@ private def changed (loader : Loader) (args : Array Data) : Async Unit := do
       match args[1]? with
       | some (.string "group") => regroup c (← getAttr c.el "group")
       | some (.string "cursor") => recursor c (← getAttr c.el "cursor")
-      | some (.string "cursor-dotted") =>
-        c.cursorDotted.set (← getAttr c.el "cursor-dotted").isSome
-        invalidate c
-      | some (.string "markers") | some (.string "marker-size") | some (.string "marker-fill") => remark c
-      | some (.string "select") => reselect c (← getAttr c.el "select")
+      | some (.string "interaction") => reinput c (← getAttr c.el "interaction")
       | some (.string "tooltip") | some (.string "legend") => reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend")
-      | some (.string "wheel") | some (.string "touch") | some (.string "drag") =>
-        reinput c (← getAttr c.el "wheel") (← getAttr c.el "touch") (← getAttr c.el "drag")
       | _ => load c loader
 
 private def define (tag : String) (loader : Loader) (resizes buttons : Bool) : IO Unit := do
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor", "select", "tooltip", "legend", "cursor-dotted", "markers", "marker-size", "marker-fill", "wheel", "touch", "drag"]
+  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend"]
     (← Function.ofFn (connect loader resizes · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))

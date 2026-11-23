@@ -17,21 +17,6 @@ inductive SelectMode where
 
 namespace SelectMode
 
-/-- Validate the raw `select` value. A missing one selects nothing. -/
-def parse : Option String → Except String SelectMode
-  | none | some "off" => .ok .off
-  | some "x" => .ok .x
-  | some s => .error s!"attribute select is \"{s}\", expected off or x"
-
-theorem parse_none : parse none = .ok .off := rfl
-
-theorem parse_x : parse (some "x") = .ok .x := rfl
-
-theorem parse_invalid (s : String) (h : s ≠ "off" ∧ s ≠ "x") : ∃ e, parse (some s) = .error e := by
-  obtain ⟨h₁, h₂⟩ := h
-  unfold parse
-  split <;> first | exact ⟨_, rfl⟩ | simp_all
-
 end SelectMode
 
 namespace Select

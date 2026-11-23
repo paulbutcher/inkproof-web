@@ -28,28 +28,11 @@ def showsY : CursorMode → Bool
   | .y | .xy => true
   | _ => false
 
-/-- Validate the raw `cursor` value. A missing one draws no cursor. -/
-def parse : Option String → Except String CursorMode
-  | none | some "off" => .ok .off
-  | some "x" => .ok .x
-  | some "y" => .ok .y
-  | some "xy" => .ok .xy
-  | some s => .error s!"attribute cursor is \"{s}\", expected off, x, y or xy"
-
 theorem showsX_iff (m : CursorMode) : m.showsX = true ↔ m = .x ∨ m = .xy := by
   cases m <;> simp [showsX]
 
 theorem showsY_iff (m : CursorMode) : m.showsY = true ↔ m = .y ∨ m = .xy := by
   cases m <;> simp [showsY]
-
-theorem parse_none : parse none = .ok .off := rfl
-
-theorem parse_xy : parse (some "xy") = .ok .xy := rfl
-
-theorem parse_invalid (s : String) (h : s ≠ "off" ∧ s ≠ "x" ∧ s ≠ "y" ∧ s ≠ "xy") : ∃ e, parse (some s) = .error e := by
-  obtain ⟨h₁, h₂, h₃, h₄⟩ := h
-  unfold parse
-  split <;> first | exact ⟨_, rfl⟩ | simp_all
 
 end CursorMode
 
