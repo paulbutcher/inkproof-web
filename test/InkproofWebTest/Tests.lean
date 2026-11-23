@@ -87,6 +87,57 @@ def legendWordsCase : TestCase :=
         (Legend.groupRows g (some 1)).map Legend.text == #["a: on", "b: -"])
       s!"{at8} {last}"
 
+/-- Two series over a 400 by 200 pixel plot of 0 to 100 by 0 to 100: the first has a value at x of 25, the second a gap. -/
+def markerTraces : Array Trace :=
+  let nan := 0.0 / 0.0
+  #[{ name := "a", color := "#d33", xs := #[0, 25, 50], ys := #[10, 30, 20] },
+    { name := "b", color := "#36c", xs := #[0, 25, 50], ys := #[80, nan, 90], hollow := true }]
+
+def markerConfig : Inkproof.Viewport.ViewConfig Float :=
+  let axis : Inkproof.Viewport.Interval.Config Float :=
+    { length := 400, minSpan := 1, maxSpan := 100, home := ⟨0, 100⟩, keyZoom := 2, keyPan := 0.25 }
+  ⟨axis, { axis with length := 200 }⟩
+
+/-- A series with a value at the cursor's x gets a marker at that value's projected position, one with a gap gets none, and the mode off gets none. -/
+def markerCase : TestCase :=
+  .mk "a marker sits at each series' value at the cursor, and not over a gap" do
+    let view := Inkproof.Viewport.View.home markerConfig
+    let all := Markers.atCursor .all {} markerConfig view markerTraces 25 none
+    let off := Markers.atCursor .off {} markerConfig view markerTraces 25 none
+    let hidden := Markers.atCursor .all {} markerConfig view (markerTraces.map fun t => { t with hidden := true }) 25 none
+    let zoomed := Markers.atCursor .all {} markerConfig { view with x := ⟨0, 50⟩ } markerTraces 25 none
+    let at0 (ms : Array Marker) := ms[0]?.map fun m => (m.series, m.x, m.y, m.color)
+    check (all.size == 1 && at0 all == some (0, 100, 140, "#d33") && off.isEmpty && hidden.isEmpty &&
+        (at0 zoomed).map (·.2.1) == some 200)
+      s!"{at0 all} {off.size} {hidden.size} {at0 zoomed}"
+
+/-- A series drawn with hollow markers gets a filled one even when the style is an outline. -/
+def markerHollowCase : TestCase :=
+  .mk "a hollow series gets a filled marker under the cursor" do
+    let view := Inkproof.Viewport.View.home markerConfig
+    let t : Trace := { name := "b", color := "#36c", xs := #[0, 25], ys := #[80, 70], hollow := true }
+    let plain : Trace := { t with hollow := false }
+    let style : MarkerStyle := { filled := false }
+    let f (t : Trace) := (Markers.atCursor .all style markerConfig view #[t] 25 none)[0]?.map (·.filled)
+    check (f t == some true && f plain == some false) s!"{f t} {f plain}"
+
+/-- With the pointer's y known, the nearest marker is that of the series nearest it; without, the first nearest along x. -/
+def markerNearestCase : TestCase :=
+  .mk "the nearest marker is that of the series nearest the pointer" do
+    let view := Inkproof.Viewport.View.home markerConfig
+    let ts : Array Trace := #[
+      { name := "a", color := "#d33", xs := #[25], ys := #[30] },
+      { name := "b", color := "#36c", xs := #[25], ys := #[70] }]
+    let near (y : Option Float) := (Markers.atCursor .nearest {} markerConfig view ts 25 y).map (·.series)
+    check (near (some 65) == #[1] && near (some 35) == #[0] && near none == #[0]) s!"{near (some 65)} {near (some 35)} {near none}"
+
+def markerAttrCase : TestCase :=
+  .mk "marker attributes are validated" do
+    let bad := (match MarkerMode.parse (some "some") with | .error _ => true | .ok _ => false) &&
+      (match MarkerStyle.parse (some "0") none with | .error _ => true | .ok _ => false) &&
+      (match MarkerStyle.parse none (some "hollow") with | .error _ => true | .ok _ => false)
+    check bad "a bad value was accepted"
+
 /-- Wherever the anchor and however far the offset, a tooltip that fits in the chart lies inside it. -/
 def tooltipPlaceCase : TestCase :=
   .mk "a tooltip that fits in the chart is placed inside it" <|
@@ -110,6 +161,6 @@ def tooltipParseCase : TestCase :=
     check (bad "shared xy" && bad "x xy" && bad "top-left top-right" && bad "12 13" && bad "wide" && offset) "tooltip words"
 
 def tests : List TestCase :=
-  [tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase, dragCase, legendGapCase]
+  [markerCase, markerHollowCase, markerNearestCase, markerAttrCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase, dragCase, legendGapCase]
 
 end InkproofWebTest

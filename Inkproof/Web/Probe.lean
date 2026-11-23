@@ -16,6 +16,8 @@ structure Trace where
   xs : Array Float
   ys : Array Float
   hidden : Bool := false
+  /-- Whether the series is drawn with hollow markers, which a cursor marker then fills. -/
+  hollow : Bool := false
 
 namespace Trace
 

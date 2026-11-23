@@ -16,6 +16,7 @@ import Inkproof.Web.Pointer
 import Inkproof.Web.Box
 import Inkproof.Web.Cursor
 import Inkproof.Web.Legend
+import Inkproof.Web.Markers
 import Inkproof.Web.Tooltip
 import Inkproof.Web.Group
 import Inkproof.Web.Input
@@ -129,6 +130,8 @@ private structure Chart where
   touchMode : IO.Ref TouchMode
   cursorMode : IO.Ref CursorMode
   cursorDotted : IO.Ref Bool
+  markerMode : IO.Ref MarkerMode
+  markerStyle : IO.Ref MarkerStyle
   tooltipStyle : IO.Ref (Option Tooltip.Style)
   /-- The legend's style, none when it shows no legend. -/
   legendStyle : IO.Ref (Option Legend.Style)
@@ -217,6 +220,11 @@ private def getAttr (el : Value) (name : String) : IO (Option String) := do
   | .string s => return some s
   | _ => return none
 
+/-- The scene's traces with the legend's choice of which are hidden. -/
+private def activeTraces (c : Chart) (scene : Scene) : IO (Array Trace) := do
+  let mask ← c.hidden.get
+  return scene.access.traces.mapIdx fun i t => { t with hidden := mask[i]?.getD t.hidden }
+
 private def draw (c : Chart) : IO Unit := do
   let size ← c.size.get
   let some scene ← c.scene.get | return
@@ -269,6 +277,17 @@ private def draw (c : Chart) : IO Unit := do
       c.ctx.callMethod "lineTo" #[toJS (origin.1 + l.x₂), toJS (origin.2 + l.y₂)] Unit
       c.ctx.callMethod "stroke" #[] Unit
     c.ctx.callMethod "setLineDash" #[toJS (#[] : Array Float)] Unit
+    let style ← c.markerStyle.get
+    for m in Markers.atCursor (← c.markerMode.get) style config view (← activeTraces c scene) x y do
+      c.ctx.callMethod "beginPath" #[] Unit
+      c.ctx.callMethod "arc" #[toJS (origin.1 + m.x), toJS (origin.2 + m.y), toJS (style.size / 2), toJS 0, toJS (2 * 3.141592653589793 : Float)] Unit
+      if m.filled then
+        c.ctx.set "fillStyle" m.color
+        c.ctx.callMethod "fill" #[] Unit
+      else
+        c.ctx.set "strokeStyle" m.color
+        c.ctx.set "lineWidth" 2
+        c.ctx.callMethod "stroke" #[] Unit
   dispatch c.el "inkproof-draw" (obj [("width", toJS size.width), ("height", toJS size.height)])
 
 private def onFrame (c : Chart) : IO Unit := do
@@ -383,7 +402,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipStyle := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -475,11 +494,6 @@ private def groupView (c : Chart) (nav : Nav) : IO (View Float) := do
 private def selectBand (c : Chart) (band : Option (Selection.Band Float)) : IO Unit := do
   applyBand c band
   if let (some band, some nav) := (band, ← c.nav.get) then followFrom c (Select.shown nav.view band)
-
-/-- The scene's traces with the legend's choice of which are hidden. -/
-private def activeTraces (c : Chart) (scene : Scene) : IO (Array Trace) := do
-  let mask ← c.hidden.get
-  return scene.access.traces.mapIdx fun i t => { t with hidden := mask[i]?.getD t.hidden }
 
 /-- The scene's value groups with the legend's choice of which are hidden. -/
 private def activeGroups (c : Chart) (scene : Scene) : IO (Array ValueGroup) := do
@@ -598,7 +612,7 @@ private def moveCursor (c : Chart) (pos : Option (Float × Option Float)) : IO U
   unless same do
     c.cursor.set pos
     refreshProbe c
-    if (← c.cursorMode.get) != .off then invalidate c
+    if (← c.cursorMode.get) != .off || (← c.markerMode.get) != .off then invalidate c
 
 /-- Show the cursor at x position `x` on every other chart in `origin`'s group, which share the axis, or take it from them. -/
 private def shareCursor (origin : Chart) (x : Option Float) : IO Unit := do
@@ -779,6 +793,9 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   let groupName ← getAttr c.el "group"
   let cursorName ← getAttr c.el "cursor"
   let dotted ← getAttr c.el "cursor-dotted"
+  let markersName ← getAttr c.el "markers"
+  let markerSize ← getAttr c.el "marker-size"
+  let markerFill ← getAttr c.el "marker-fill"
   let tooltipName ← getAttr c.el "tooltip"
   let legendName ← getAttr c.el "legend"
   let selectName ← getAttr c.el "select"
@@ -794,6 +811,11 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
       setLegendStyle c legend
       c.wheelMode.set wheel
       c.touchMode.set touch
+    match MarkerMode.parse markersName, MarkerStyle.parse markerSize markerFill with
+    | .error message, _ | _, .error message => fail c message []
+    | .ok markers, .ok style =>
+      c.markerMode.set markers
+      c.markerStyle.set style
     c.cursorMode.set cursor
     c.cursorDotted.set dotted.isSome
     c.selectMode.set select
@@ -984,6 +1006,15 @@ private def recursor (c : Chart) (value : Option String) : IO Unit := do
     c.cursorMode.set mode
     invalidate c
 
+/-- A change of `markers`, `marker-size` or `marker-fill` redraws the chart without reloading it. -/
+private def remark (c : Chart) : IO Unit := do
+  match MarkerMode.parse (← getAttr c.el "markers"), MarkerStyle.parse (← getAttr c.el "marker-size") (← getAttr c.el "marker-fill") with
+  | .error message, _ | _, .error message => fail c message []
+  | .ok mode, .ok style =>
+    c.markerMode.set mode
+    c.markerStyle.set style
+    invalidate c
+
 /-- A change of `tooltip` or `legend` redraws them without reloading the chart. -/
 private def reprobe (c : Chart) (tooltip legend : Option String) : IO Unit := do
   match Tooltip.parse tooltip, Legend.parseStyle legend with
@@ -1025,6 +1056,7 @@ private def changed (loader : Loader) (args : Array Data) : Async Unit := do
       | some (.string "cursor-dotted") =>
         c.cursorDotted.set (← getAttr c.el "cursor-dotted").isSome
         invalidate c
+      | some (.string "markers") | some (.string "marker-size") | some (.string "marker-fill") => remark c
       | some (.string "select") => reselect c (← getAttr c.el "select")
       | some (.string "tooltip") | some (.string "legend") => reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend")
       | some (.string "wheel") | some (.string "touch") | some (.string "drag") =>
@@ -1035,7 +1067,7 @@ private def define (tag : String) (loader : Loader) (resizes buttons : Bool) : I
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor", "select", "tooltip", "legend", "cursor-dotted", "wheel", "touch", "drag"]
+  defineElement tag #["src", "log-level", "group", "cursor", "select", "tooltip", "legend", "cursor-dotted", "markers", "marker-size", "marker-fill", "wheel", "touch", "drag"]
     (← Function.ofFn (connect loader resizes · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))

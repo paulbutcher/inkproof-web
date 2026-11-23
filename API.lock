@@ -233,6 +233,45 @@ field Inkproof.Web.Line.x₁ : Inkproof.Web.Line → Float
 field Inkproof.Web.Line.x₂ : Inkproof.Web.Line → Float
 field Inkproof.Web.Line.y₁ : Inkproof.Web.Line → Float
 field Inkproof.Web.Line.y₂ : Inkproof.Web.Line → Float
+structure Inkproof.Web.Marker : Type
+field Inkproof.Web.Marker.color : Inkproof.Web.Marker → String
+field Inkproof.Web.Marker.filled : Inkproof.Web.Marker → Bool
+constructor Inkproof.Web.Marker.mk : Nat → Float → Float → String → Bool → Inkproof.Web.Marker
+def Inkproof.Web.Marker.ofTrace : Inkproof.Web.MarkerStyle → Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Float → Nat → Inkproof.Web.Trace → Option Inkproof.Web.Marker
+theorem Inkproof.Web.Marker.ofTrace_eq : ∀ (style : Inkproof.Web.MarkerStyle) (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (x : Float) (series : Nat) (t : Inkproof.Web.Trace), t.hidden = Bool.false → ∀ (p : Float × Float), Inkproof.Web.Marker.position config view t x = Option.some p → Inkproof.Web.Marker.ofTrace style config view x series t = Option.some { series := series, x := p.fst, y := p.snd, color := t.color, filled := style.filled || t.hollow }
+theorem Inkproof.Web.Marker.ofTrace_hidden : ∀ (style : Inkproof.Web.MarkerStyle) (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (x : Float) (series : Nat) (t : Inkproof.Web.Trace), t.hidden = Bool.true → Inkproof.Web.Marker.ofTrace style config view x series t = Option.none
+theorem Inkproof.Web.Marker.ofTrace_none : ∀ (style : Inkproof.Web.MarkerStyle) (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (x : Float) (series : Nat) (t : Inkproof.Web.Trace), Inkproof.Web.Marker.position config view t x = Option.none → Inkproof.Web.Marker.ofTrace style config view x series t = Option.none
+def Inkproof.Web.Marker.position : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Inkproof.Web.Trace → Float → Option (Float × Float)
+theorem Inkproof.Web.Marker.position_eq : ∀ (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (t : Inkproof.Web.Trace) (x px py : Float), t.nearestPoint x = Option.some (px, py) → Inkproof.Web.Marker.position config view t x = if py.isNaN = Bool.true then Option.none else if (Decidable.decide (0 ≤ Inkproof.Viewport.Interval.toScreen config.x view.x px) && Decidable.decide (Inkproof.Viewport.Interval.toScreen config.x view.x px ≤ config.x.length) && Decidable.decide (0 ≤ config.y.length - Inkproof.Viewport.Interval.toScreen config.y view.y py) && Decidable.decide (config.y.length - Inkproof.Viewport.Interval.toScreen config.y view.y py ≤ config.y.length)) = Bool.true then Option.some (Inkproof.Viewport.Interval.toScreen config.x view.x px, config.y.length - Inkproof.Viewport.Interval.toScreen config.y view.y py) else Option.none
+theorem Inkproof.Web.Marker.position_none : ∀ (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (t : Inkproof.Web.Trace) (x : Float), t.nearestPoint x = Option.none → Inkproof.Web.Marker.position config view t x = Option.none
+field Inkproof.Web.Marker.series : Inkproof.Web.Marker → Nat
+field Inkproof.Web.Marker.x : Inkproof.Web.Marker → Float
+field Inkproof.Web.Marker.y : Inkproof.Web.Marker → Float
+inductive Inkproof.Web.MarkerMode : Type
+constructor Inkproof.Web.MarkerMode.all : Inkproof.Web.MarkerMode
+constructor Inkproof.Web.MarkerMode.nearest : Inkproof.Web.MarkerMode
+def Inkproof.Web.MarkerMode.ofNat : Nat → Inkproof.Web.MarkerMode
+theorem Inkproof.Web.MarkerMode.ofNat_ctorIdx : ∀ (x : Inkproof.Web.MarkerMode), Inkproof.Web.MarkerMode.ofNat x.ctorIdx = x
+constructor Inkproof.Web.MarkerMode.off : Inkproof.Web.MarkerMode
+def Inkproof.Web.MarkerMode.parse : Option String → Except String Inkproof.Web.MarkerMode
+theorem Inkproof.Web.MarkerMode.parse_all : Inkproof.Web.MarkerMode.parse (Option.some "all") = Except.ok Inkproof.Web.MarkerMode.all
+theorem Inkproof.Web.MarkerMode.parse_invalid : ∀ (s : String), s ≠ "off" ∧ s ≠ "all" ∧ s ≠ "nearest" → ∃ e, Inkproof.Web.MarkerMode.parse (Option.some s) = Except.error e
+theorem Inkproof.Web.MarkerMode.parse_nearest : Inkproof.Web.MarkerMode.parse (Option.some "nearest") = Except.ok Inkproof.Web.MarkerMode.nearest
+theorem Inkproof.Web.MarkerMode.parse_none : Inkproof.Web.MarkerMode.parse Option.none = Except.ok Inkproof.Web.MarkerMode.off
+structure Inkproof.Web.MarkerStyle : Type
+field Inkproof.Web.MarkerStyle.filled : Inkproof.Web.MarkerStyle → Bool
+constructor Inkproof.Web.MarkerStyle.mk : Float → Bool → Inkproof.Web.MarkerStyle
+def Inkproof.Web.MarkerStyle.parse : Option String → Option String → Except String Inkproof.Web.MarkerStyle
+theorem Inkproof.Web.MarkerStyle.parse_default : ∃ s, Inkproof.Web.MarkerStyle.parse Option.none Option.none = Except.ok s ∧ s.size = 6 ∧ s.filled = Bool.true
+theorem Inkproof.Web.MarkerStyle.parse_outline : ∃ s, Inkproof.Web.MarkerStyle.parse Option.none (Option.some "outline") = Except.ok s ∧ s.filled = Bool.false
+theorem Inkproof.Web.MarkerStyle.parse_size : ∀ (s : String) (n : Nat), s.toNat? = Option.some n → n ≠ 0 → ∃ m, Inkproof.Web.MarkerStyle.parse (Option.some s) Option.none = Except.ok m ∧ m.size = n.toFloat ∧ m.filled = Bool.true
+field Inkproof.Web.MarkerStyle.size : Inkproof.Web.MarkerStyle → Float
+def Inkproof.Web.Markers.atCursor : Inkproof.Web.MarkerMode → Inkproof.Web.MarkerStyle → Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Array Inkproof.Web.Trace → Float → Option Float → Array Inkproof.Web.Marker
+theorem Inkproof.Web.Markers.atCursor_all : ∀ (style : Inkproof.Web.MarkerStyle) (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (traces : Array Inkproof.Web.Trace) (x : Float) (y : Option Float), Inkproof.Web.Markers.atCursor Inkproof.Web.MarkerMode.all style config view traces x y = (List.filterMap (fun x_1 => match x_1 with | (t, s) => Inkproof.Web.Marker.ofTrace style config view x s t) traces.toList.zipIdx).toArray
+theorem Inkproof.Web.Markers.atCursor_nearest : ∀ (style : Inkproof.Web.MarkerStyle) (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (traces : Array Inkproof.Web.Trace) (x : Float) (y : Option Float), Inkproof.Web.Markers.atCursor Inkproof.Web.MarkerMode.nearest style config view traces x y = (Inkproof.Web.Markers.nearestOf (Inkproof.Viewport.Interval.toScreen config.x view.x x) (Option.map (fun y => config.y.length - Inkproof.Viewport.Interval.toScreen config.y view.y y) y) (List.filterMap (fun x_1 => match x_1 with | (t, s) => Inkproof.Web.Marker.ofTrace style config view x s t) traces.toList.zipIdx)).toList.toArray
+theorem Inkproof.Web.Markers.atCursor_off : ∀ (style : Inkproof.Web.MarkerStyle) (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (traces : Array Inkproof.Web.Trace) (x : Float) (y : Option Float), Inkproof.Web.Markers.atCursor Inkproof.Web.MarkerMode.off style config view traces x y = #[]
+theorem Inkproof.Web.Markers.mem_atCursor_all : ∀ (style : Inkproof.Web.MarkerStyle) (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (traces : Array Inkproof.Web.Trace) (x : Float) (y : Option Float) (m : Inkproof.Web.Marker), m ∈ Inkproof.Web.Markers.atCursor Inkproof.Web.MarkerMode.all style config view traces x y ↔ ∃ t, traces[m.series]? = Option.some t ∧ Inkproof.Web.Marker.ofTrace style config view x m.series t = Option.some m
+def Inkproof.Web.Markers.nearestOf : Float → Option Float → List Inkproof.Web.Marker → Option Inkproof.Web.Marker
 inductive Inkproof.Web.Metric : Type
 def Inkproof.Web.Metric.dist : Inkproof.Web.Metric → Float → Float → Inkproof.Web.Candidate → Float
 theorem Inkproof.Web.Metric.dist_plane : ∀ (cx cy : Float) (c : Inkproof.Web.Candidate), Inkproof.Web.Metric.plane.dist cx cy c = (c.x - cx) * (c.x - cx) + (c.y - cy) * (c.y - cy)
@@ -400,10 +439,11 @@ theorem Inkproof.Web.TouchMode.parse_off : Inkproof.Web.TouchMode.parse (Option.
 structure Inkproof.Web.Trace : Type
 field Inkproof.Web.Trace.color : Inkproof.Web.Trace → String
 field Inkproof.Web.Trace.hidden : Inkproof.Web.Trace → Bool
+field Inkproof.Web.Trace.hollow : Inkproof.Web.Trace → Bool
 def Inkproof.Web.Trace.lastValue : Inkproof.Web.Trace → Option Float
 theorem Inkproof.Web.Trace.lastValue_eq : ∀ (t : Inkproof.Web.Trace), t.lastValue = t.ys.back?.bind fun y => if y.isNaN = Bool.true then Option.none else Option.some y
 theorem Inkproof.Web.Trace.lastValue_not_nan : ∀ (t : Inkproof.Web.Trace) (v : Float), t.lastValue = Option.some v → v.isNaN = Bool.false
-constructor Inkproof.Web.Trace.mk : String → String → Array Float → Array Float → Bool → Inkproof.Web.Trace
+constructor Inkproof.Web.Trace.mk : String → String → Array Float → Array Float → Bool → Bool → Inkproof.Web.Trace
 field Inkproof.Web.Trace.name : Inkproof.Web.Trace → String
 def Inkproof.Web.Trace.nearestPoint : Inkproof.Web.Trace → Float → Option (Float × Float)
 theorem Inkproof.Web.Trace.nearestPoint_eq : ∀ (t : Inkproof.Web.Trace) (x : Float), t.nearestPoint x = Inkproof.Web.nearestBy (t.xs.zip t.ys) x
@@ -475,6 +515,7 @@ instance Inkproof.Web.instDecidableEqDragMode : DecidableEq Inkproof.Web.DragMod
 instance Inkproof.Web.instDecidableEqFrame : DecidableEq Inkproof.Web.Frame
 def Inkproof.Web.instDecidableEqFrame.decEq : (x x_1 : Inkproof.Web.Frame) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqLevel : DecidableEq Inkproof.Web.Level
+instance Inkproof.Web.instDecidableEqMarkerMode : DecidableEq Inkproof.Web.MarkerMode
 instance Inkproof.Web.instDecidableEqMetric : DecidableEq Inkproof.Web.Metric
 instance Inkproof.Web.instDecidableEqSelectMode : DecidableEq Inkproof.Web.SelectMode
 instance Inkproof.Web.instDecidableEqSize : DecidableEq Inkproof.Web.Size

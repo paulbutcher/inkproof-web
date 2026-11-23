@@ -594,6 +594,40 @@ test('a cursor follows the pointer and shows on the other charts of its group', 
   await context.close();
 });
 
+test('markers sit on each series at the cursor, only a nearest one on a nearest chart, and none with the cursor away', async () => {
+  const { page, context } = await open('/markers.html');
+  await drawn(page, 2);
+  const read = (id, x, y) => page.evaluate(([id, x, y]) => {
+    const canvas = document.getElementById(id).shadowRoot.querySelector('canvas');
+    return [...canvas.getContext('2d').getImageData(x, y, 1, 1).data];
+  }, [id, x, y]);
+  const move = (id, type, y) => page.evaluate(([id, type, y]) => {
+    const el = document.getElementById(id);
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent(type, { pointerId: 1, clientX: rect.left + 100, clientY: rect.top + y }));
+  }, [id, type, y]);
+  const spots = { a: [[100, 140], [100, 60], [100, 100]], b: [[100, 140], [100, 60]] };
+  const snap = async id => Promise.all(spots[id].map(([x, y]) => read(id, x, y)));
+  const away = { a: await snap('a'), b: await snap('b') };
+  await move('a', 'pointermove', 100);
+  await settle(page);
+  const near = await snap('a');
+  assert.notDeepEqual(near[0], away.a[0], 'the first series has a marker at its value at the cursor x');
+  assert.deepEqual(near[0].slice(0, 3), [0xdd, 0x33, 0x33], 'in its colour');
+  assert.notDeepEqual(near[1], away.a[1], 'so has the second');
+  assert.deepEqual(near[2], away.a[2], 'nothing is drawn between them');
+  await move('a', 'pointerleave', 100);
+  await settle(page);
+  assert.deepEqual(await snap('a'), away.a, 'leaving takes the markers away');
+  await move('b', 'pointermove', 130);
+  await settle(page);
+  const only = await snap('b');
+  assert.notDeepEqual(only[0], away.b[0], 'the series nearest the pointer has a marker');
+  assert.deepEqual(only[1], away.b[1], 'the other has none');
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
 test('a drag on a selecting chart draws a band that the others in its group show, and its own range stays', async () => {
   const { page, context } = await open('/select.html');
   await drawn(page, 2);
