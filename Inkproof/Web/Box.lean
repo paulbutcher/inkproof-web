@@ -60,10 +60,11 @@ theorem parse_minDistance_invalid (s : String) (h : s.toNat? = none) : ∃ e, pa
 
 end BoxConfig
 
-/-- What a drag with one pointer does: pan the view or draw a box to zoom to. Shift swaps the two. -/
+/-- What a drag with one pointer does: pan the view or draw a box to zoom to, with shift swapping the two, or nothing, leaving the drag to the browser. -/
 inductive DragMode where
   | pan
   | box
+  | off
   deriving DecidableEq
 
 namespace DragMode
@@ -73,6 +74,21 @@ def boxes (m : DragMode) (shift : Bool) : Bool :=
   match m with
   | .pan => shift
   | .box => !shift
+  | .off => false
+
+/-- Whether a drag started with the shift key in the given state pans. -/
+def pans (m : DragMode) (shift : Bool) : Bool :=
+  match m with
+  | .pan => !shift
+  | .box => shift
+  | .off => false
+
+theorem pans_not_boxes (m : DragMode) (shift : Bool) (h : m ≠ .off) : m.pans shift = !m.boxes shift := by
+  cases m <;> simp_all [pans, boxes]
+
+theorem boxes_off (shift : Bool) : DragMode.off.boxes shift = false := rfl
+
+theorem pans_off (shift : Bool) : DragMode.off.pans shift = false := rfl
 
 theorem boxes_pan (shift : Bool) : DragMode.pan.boxes shift = shift := rfl
 
@@ -82,14 +98,17 @@ theorem boxes_box (shift : Bool) : DragMode.box.boxes shift = !shift := rfl
 def parse : Option String → Except String DragMode
   | none | some "pan" => .ok .pan
   | some "box" => .ok .box
-  | some s => .error s!"attribute drag is \"{s}\", expected pan or box"
+  | some "off" => .ok .off
+  | some s => .error s!"attribute drag is \"{s}\", expected pan, box or off"
 
 theorem parse_none : parse none = .ok .pan := rfl
 
 theorem parse_box : parse (some "box") = .ok .box := rfl
 
-theorem parse_invalid (s : String) (h : s ≠ "pan" ∧ s ≠ "box") : ∃ e, parse (some s) = .error e := by
-  obtain ⟨h₁, h₂⟩ := h
+theorem parse_off : parse (some "off") = .ok .off := rfl
+
+theorem parse_invalid (s : String) (h : s ≠ "pan" ∧ s ≠ "box" ∧ s ≠ "off") : ∃ e, parse (some s) = .error e := by
+  obtain ⟨h₁, h₂, h₃⟩ := h
   unfold parse
   split <;> first | exact ⟨_, rfl⟩ | simp_all
 

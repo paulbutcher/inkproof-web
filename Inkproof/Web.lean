@@ -12,6 +12,7 @@ import Inkproof.Web.Pointer
 import Inkproof.Web.Box
 import Inkproof.Web.Cursor
 import Inkproof.Web.Group
+import Inkproof.Web.Input
 import Inkproof.Web.Select
 import Inkproof.Web.Events
 import Inkproof.Web.SceneState

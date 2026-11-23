@@ -75,14 +75,20 @@ inductive Inkproof.Web.DragMode : Type
 constructor Inkproof.Web.DragMode.box : Inkproof.Web.DragMode
 def Inkproof.Web.DragMode.boxes : Inkproof.Web.DragMode → Bool → Bool
 theorem Inkproof.Web.DragMode.boxes_box : ∀ (shift : Bool), Inkproof.Web.DragMode.box.boxes shift = !shift
+theorem Inkproof.Web.DragMode.boxes_off : ∀ (shift : Bool), Inkproof.Web.DragMode.off.boxes shift = Bool.false
 theorem Inkproof.Web.DragMode.boxes_pan : ∀ (shift : Bool), Inkproof.Web.DragMode.pan.boxes shift = shift
 def Inkproof.Web.DragMode.ofNat : Nat → Inkproof.Web.DragMode
 theorem Inkproof.Web.DragMode.ofNat_ctorIdx : ∀ (x : Inkproof.Web.DragMode), Inkproof.Web.DragMode.ofNat x.ctorIdx = x
+constructor Inkproof.Web.DragMode.off : Inkproof.Web.DragMode
 constructor Inkproof.Web.DragMode.pan : Inkproof.Web.DragMode
+def Inkproof.Web.DragMode.pans : Inkproof.Web.DragMode → Bool → Bool
+theorem Inkproof.Web.DragMode.pans_not_boxes : ∀ (m : Inkproof.Web.DragMode) (shift : Bool), m ≠ Inkproof.Web.DragMode.off → m.pans shift = !m.boxes shift
+theorem Inkproof.Web.DragMode.pans_off : ∀ (shift : Bool), Inkproof.Web.DragMode.off.pans shift = Bool.false
 def Inkproof.Web.DragMode.parse : Option String → Except String Inkproof.Web.DragMode
 theorem Inkproof.Web.DragMode.parse_box : Inkproof.Web.DragMode.parse (Option.some "box") = Except.ok Inkproof.Web.DragMode.box
-theorem Inkproof.Web.DragMode.parse_invalid : ∀ (s : String), s ≠ "pan" ∧ s ≠ "box" → ∃ e, Inkproof.Web.DragMode.parse (Option.some s) = Except.error e
+theorem Inkproof.Web.DragMode.parse_invalid : ∀ (s : String), s ≠ "pan" ∧ s ≠ "box" ∧ s ≠ "off" → ∃ e, Inkproof.Web.DragMode.parse (Option.some s) = Except.error e
 theorem Inkproof.Web.DragMode.parse_none : Inkproof.Web.DragMode.parse Option.none = Except.ok Inkproof.Web.DragMode.pan
+theorem Inkproof.Web.DragMode.parse_off : Inkproof.Web.DragMode.parse (Option.some "off") = Except.ok Inkproof.Web.DragMode.off
 structure Inkproof.Web.Frame : Type
 field Inkproof.Web.Frame.dirty : Inkproof.Web.Frame → Bool
 def Inkproof.Web.Frame.drawn : Inkproof.Web.Frame → Inkproof.Web.Frame
@@ -364,6 +370,33 @@ theorem Inkproof.Web.Tooltip.sharedText_eq : ∀ (showX : Bool) (traces : Array 
 theorem Inkproof.Web.Tooltip.sharedText_none_of_hidden : ∀ (showX : Bool) (traces : Array Inkproof.Web.Trace) (x : Float), (∀ (t : Inkproof.Web.Trace), t ∈ traces → t.hidden = Bool.true) → Inkproof.Web.Tooltip.sharedText showX traces x = Option.none
 def Inkproof.Web.Tooltip.single : Bool → Array Inkproof.Web.Trace → Inkproof.Web.Candidate → Option String
 theorem Inkproof.Web.Tooltip.single_eq : ∀ (showX : Bool) (traces : Array Inkproof.Web.Trace) (c : Inkproof.Web.Candidate) (t : Inkproof.Web.Trace) (x y : Float), traces[c.series]? = Option.some t → t.xs[c.point]? = Option.some x → t.ys[c.point]? = Option.some y → Inkproof.Web.Tooltip.single showX traces c = Option.some (if showX = Bool.true then ToString.toString t.name ++ ToString.toString ": " ++ ToString.toString (Inkproof.Web.showFloat x) ++ ToString.toString ", " ++ ToString.toString (Inkproof.Web.showFloat y) else ToString.toString t.name ++ ToString.toString ": " ++ ToString.toString (Inkproof.Web.showFloat y))
+inductive Inkproof.Web.TouchAction : Type
+constructor Inkproof.Web.TouchAction.auto : Inkproof.Web.TouchAction
+def Inkproof.Web.TouchAction.css : Inkproof.Web.TouchAction → String
+theorem Inkproof.Web.TouchAction.css_auto : Inkproof.Web.TouchAction.auto.css = "auto"
+theorem Inkproof.Web.TouchAction.css_none : Inkproof.Web.TouchAction.none.css = "none"
+theorem Inkproof.Web.TouchAction.css_panXY : Inkproof.Web.TouchAction.panXY.css = "pan-x pan-y"
+theorem Inkproof.Web.TouchAction.css_panY : Inkproof.Web.TouchAction.panY.css = "pan-y"
+constructor Inkproof.Web.TouchAction.none : Inkproof.Web.TouchAction
+def Inkproof.Web.TouchAction.of : Bool → Inkproof.Web.TouchMode → Inkproof.Web.DragMode → Inkproof.Web.SelectMode → Inkproof.Web.TouchAction
+def Inkproof.Web.TouchAction.ofNat : Nat → Inkproof.Web.TouchAction
+theorem Inkproof.Web.TouchAction.ofNat_ctorIdx : ∀ (x : Inkproof.Web.TouchAction), Inkproof.Web.TouchAction.ofNat x.ctorIdx = x
+theorem Inkproof.Web.TouchAction.of_drag : ∀ (drag : Inkproof.Web.DragMode), drag ≠ Inkproof.Web.DragMode.off → Inkproof.Web.TouchAction.of Bool.true Inkproof.Web.TouchMode.on drag Inkproof.Web.SelectMode.off = Inkproof.Web.TouchAction.none
+theorem Inkproof.Web.TouchAction.of_drag_off : Inkproof.Web.TouchAction.of Bool.true Inkproof.Web.TouchMode.on Inkproof.Web.DragMode.off Inkproof.Web.SelectMode.off = Inkproof.Web.TouchAction.panXY
+theorem Inkproof.Web.TouchAction.of_no_view : ∀ (touch : Inkproof.Web.TouchMode) (drag : Inkproof.Web.DragMode) (select : Inkproof.Web.SelectMode), Inkproof.Web.TouchAction.of Bool.false touch drag select = Inkproof.Web.TouchAction.auto
+theorem Inkproof.Web.TouchAction.of_select : ∀ (drag : Inkproof.Web.DragMode), Inkproof.Web.TouchAction.of Bool.true Inkproof.Web.TouchMode.on drag Inkproof.Web.SelectMode.x = Inkproof.Web.TouchAction.panY
+theorem Inkproof.Web.TouchAction.of_touch_off : ∀ (drag : Inkproof.Web.DragMode) (select : Inkproof.Web.SelectMode), Inkproof.Web.TouchAction.of Bool.true Inkproof.Web.TouchMode.off drag select = Inkproof.Web.TouchAction.auto
+constructor Inkproof.Web.TouchAction.panXY : Inkproof.Web.TouchAction
+constructor Inkproof.Web.TouchAction.panY : Inkproof.Web.TouchAction
+inductive Inkproof.Web.TouchMode : Type
+def Inkproof.Web.TouchMode.ofNat : Nat → Inkproof.Web.TouchMode
+theorem Inkproof.Web.TouchMode.ofNat_ctorIdx : ∀ (x : Inkproof.Web.TouchMode), Inkproof.Web.TouchMode.ofNat x.ctorIdx = x
+constructor Inkproof.Web.TouchMode.off : Inkproof.Web.TouchMode
+constructor Inkproof.Web.TouchMode.on : Inkproof.Web.TouchMode
+def Inkproof.Web.TouchMode.parse : Option String → Except String Inkproof.Web.TouchMode
+theorem Inkproof.Web.TouchMode.parse_invalid : ∀ (s : String), s ≠ "on" ∧ s ≠ "off" → ∃ e, Inkproof.Web.TouchMode.parse (Option.some s) = Except.error e
+theorem Inkproof.Web.TouchMode.parse_none : Inkproof.Web.TouchMode.parse Option.none = Except.ok Inkproof.Web.TouchMode.on
+theorem Inkproof.Web.TouchMode.parse_off : Inkproof.Web.TouchMode.parse (Option.some "off") = Except.ok Inkproof.Web.TouchMode.off
 structure Inkproof.Web.Trace : Type
 field Inkproof.Web.Trace.color : Inkproof.Web.Trace → String
 field Inkproof.Web.Trace.hidden : Inkproof.Web.Trace → Bool
@@ -407,6 +440,21 @@ field Inkproof.Web.ValueGroup.xs : Inkproof.Web.ValueGroup → Array Float
 def Inkproof.Web.View.ofBounds : Float → Float → Float → Float → Inkproof.Viewport.View Float
 theorem Inkproof.Web.View.ofBounds_x : ∀ (xStart xEnd yStart yEnd : Float), (Inkproof.Web.View.ofBounds xStart xEnd yStart yEnd).x = { start := xStart, span := xEnd - xStart }
 theorem Inkproof.Web.View.ofBounds_y : ∀ (xStart xEnd yStart yEnd : Float), (Inkproof.Web.View.ofBounds xStart xEnd yStart yEnd).y = { start := yStart, span := yEnd - yStart }
+inductive Inkproof.Web.WheelMode : Type
+constructor Inkproof.Web.WheelMode.ctrl : Inkproof.Web.WheelMode
+def Inkproof.Web.WheelMode.ofNat : Nat → Inkproof.Web.WheelMode
+theorem Inkproof.Web.WheelMode.ofNat_ctorIdx : ∀ (x : Inkproof.Web.WheelMode), Inkproof.Web.WheelMode.ofNat x.ctorIdx = x
+constructor Inkproof.Web.WheelMode.off : Inkproof.Web.WheelMode
+def Inkproof.Web.WheelMode.parse : Option String → Except String Inkproof.Web.WheelMode
+theorem Inkproof.Web.WheelMode.parse_ctrl : Inkproof.Web.WheelMode.parse (Option.some "ctrl") = Except.ok Inkproof.Web.WheelMode.ctrl
+theorem Inkproof.Web.WheelMode.parse_invalid : ∀ (s : String), s ≠ "zoom" ∧ s ≠ "ctrl" ∧ s ≠ "off" → ∃ e, Inkproof.Web.WheelMode.parse (Option.some s) = Except.error e
+theorem Inkproof.Web.WheelMode.parse_none : Inkproof.Web.WheelMode.parse Option.none = Except.ok Inkproof.Web.WheelMode.zoom
+theorem Inkproof.Web.WheelMode.parse_off : Inkproof.Web.WheelMode.parse (Option.some "off") = Except.ok Inkproof.Web.WheelMode.off
+constructor Inkproof.Web.WheelMode.zoom : Inkproof.Web.WheelMode
+def Inkproof.Web.WheelMode.zooms : Inkproof.Web.WheelMode → Bool → Bool → Bool
+theorem Inkproof.Web.WheelMode.zooms_ctrl : ∀ (ctrl cmd : Bool), Inkproof.Web.WheelMode.ctrl.zooms ctrl cmd = (ctrl || cmd)
+theorem Inkproof.Web.WheelMode.zooms_off : ∀ (ctrl cmd : Bool), Inkproof.Web.WheelMode.off.zooms ctrl cmd = Bool.false
+theorem Inkproof.Web.WheelMode.zooms_zoom : ∀ (ctrl cmd : Bool), Inkproof.Web.WheelMode.zoom.zooms ctrl cmd = Bool.true
 def Inkproof.Web.backingPx : Nat → Inkproof.Web.Milli → Nat
 theorem Inkproof.Web.backingPx_close : ∀ {css : Nat} (ratio : Inkproof.Web.Milli), 1000 ≤ css * ratio + 500 → css ≠ 0 → Inkproof.Web.backingPx css ratio * 1000 ≤ css * ratio + 500 ∧ css * ratio < Inkproof.Web.backingPx css ratio * 1000 + 500
 theorem Inkproof.Web.backingPx_pos : ∀ {css : Nat}, 0 < css → ∀ (ratio : Inkproof.Web.Milli), 0 < Inkproof.Web.backingPx css ratio
@@ -431,6 +479,9 @@ instance Inkproof.Web.instDecidableEqMetric : DecidableEq Inkproof.Web.Metric
 instance Inkproof.Web.instDecidableEqSelectMode : DecidableEq Inkproof.Web.SelectMode
 instance Inkproof.Web.instDecidableEqSize : DecidableEq Inkproof.Web.Size
 def Inkproof.Web.instDecidableEqSize.decEq : (x x_1 : Inkproof.Web.Size) → Decidable (x = x_1)
+instance Inkproof.Web.instDecidableEqTouchAction : DecidableEq Inkproof.Web.TouchAction
+instance Inkproof.Web.instDecidableEqTouchMode : DecidableEq Inkproof.Web.TouchMode
+instance Inkproof.Web.instDecidableEqWheelMode : DecidableEq Inkproof.Web.WheelMode
 instance Inkproof.Web.instInhabitedLevel : Inhabited Inkproof.Web.Level
 def Inkproof.Web.instInhabitedLevel.default : Inkproof.Web.Level
 instance Inkproof.Web.instInhabitedTextCache : Inhabited Inkproof.Web.TextCache

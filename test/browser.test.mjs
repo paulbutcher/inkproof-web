@@ -921,6 +921,78 @@ test('a clipped draw covers the whole plot at any device pixel ratio', async () 
   }
 });
 
+// Dispatches a wheel event over the plot and reports whether the chart took it (default-prevented).
+const wheelTaken = (page, init = {}) => page.evaluate(init => {
+  const el = document.querySelector('inkproof-accessible-chart');
+  const rect = el.getBoundingClientRect();
+  return !el.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: rect.left + 100, clientY: rect.top + 100, deltaY: -200, ...init }));
+}, init);
+const touchAction = page => page.evaluate(() => getComputedStyle(document.querySelector('inkproof-accessible-chart')).touchAction);
+const zoomed = async page => { const v = await lastView(page); return v !== undefined && v.xEnd - v.xStart < 100; };
+
+test('a chart with wheel="off" leaves the wheel to the page', async () => {
+  const { page, context } = await open('/wheeloff.html');
+  await drawn(page, 1);
+  assert.equal(await wheelTaken(page), false);
+  await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200 }]]);
+  assert.equal(await zoomed(page), false, 'the view did not change');
+  await context.close();
+});
+
+test('a chart with no wheel attribute takes the wheel and zooms', async () => {
+  const { page, context } = await open('/accessible.html');
+  await drawn(page, 1);
+  assert.equal(await wheelTaken(page), true);
+  await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200 }]]);
+  assert.equal(await zoomed(page), true);
+  await context.close();
+});
+
+test('with wheel="ctrl" only the wheel with Ctrl or Meta held zooms', async () => {
+  const { page, context } = await open('/wheelctrl.html');
+  await drawn(page, 1);
+  assert.equal(await wheelTaken(page), false);
+  await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200 }]]);
+  assert.equal(await zoomed(page), false);
+  assert.equal(await wheelTaken(page, { ctrlKey: true }), true);
+  assert.equal(await wheelTaken(page, { metaKey: true }), true);
+  await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200, ctrlKey: true }]]);
+  assert.equal(await zoomed(page), true);
+  await context.close();
+});
+
+test('touch-action follows what the chart does with touch', async () => {
+  const check = async (path, expected) => {
+    const { page, context } = await open(path);
+    await drawn(page, 1);
+    assert.equal(await touchAction(page), expected, path);
+    await context.close();
+  };
+  await check('/accessible.html', 'none');
+  await check('/touchoff.html', 'auto');
+  await check('/dragoff.html', 'pan-x pan-y');
+  await check('/select.html', 'pan-y');
+});
+
+test('with touch="off" a finger does not pan or pinch', async () => {
+  const { page, context } = await open('/touchoff.html');
+  await drawn(page, 1);
+  await gesture(page, [['pointerdown', { x: 100, y: 100, pointerId: 1 }], ['pointermove', { x: 200, y: 100, pointerId: 1 }], ['pointerup', { x: 200, y: 100, pointerId: 1 }]]);
+  const views = await page.evaluate(() => window.views);
+  assert.equal(views.length, 0, 'no view change');
+  await context.close();
+});
+
+test('with drag="off" a mouse drag does not pan but a pinch still zooms', async () => {
+  const { page, context } = await open('/dragoff.html');
+  await drawn(page, 1);
+  await gesture(page, [['pointerdown', { x: 100, y: 100, pointerId: 1, pointerType: 'mouse' }], ['pointermove', { x: 200, y: 100, pointerId: 1, pointerType: 'mouse' }], ['pointerup', { x: 200, y: 100, pointerId: 1, pointerType: 'mouse' }]]);
+  assert.equal((await page.evaluate(() => window.views)).length, 0, 'the drag did not pan');
+  await gesture(page, [['pointerdown', { x: 100, y: 100, pointerId: 1 }], ['pointerdown', { x: 200, y: 100, pointerId: 2 }], ['pointermove', { x: 50, y: 100, pointerId: 1 }], ['pointermove', { x: 250, y: 100, pointerId: 2 }]]);
+  assert.equal(await zoomed(page), true, 'the pinch zoomed');
+  await context.close();
+});
+
 test('the tooltip stays inside the chart, moves by its offset and takes its look from custom properties', async () => {
   const { page, context } = await open('/tooltip.html');
   await drawn(page, 1);

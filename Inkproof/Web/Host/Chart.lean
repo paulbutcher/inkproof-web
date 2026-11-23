@@ -18,6 +18,7 @@ import Inkproof.Web.Cursor
 import Inkproof.Web.Legend
 import Inkproof.Web.Tooltip
 import Inkproof.Web.Group
+import Inkproof.Web.Input
 import Inkproof.Web.Select
 import Inkproof.Web.Events
 import Inkproof.Web.Host.Console
@@ -124,6 +125,8 @@ private structure Chart where
   boxConfig : IO.Ref BoxConfig
   group : IO.Ref (Option String)
   dragMode : IO.Ref DragMode
+  wheelMode : IO.Ref WheelMode
+  touchMode : IO.Ref TouchMode
   cursorMode : IO.Ref CursorMode
   cursorDotted : IO.Ref Bool
   tooltipStyle : IO.Ref (Option Tooltip.Style)
@@ -329,7 +332,7 @@ private partial def watchRatio (c : Chart) (after : IO Unit) : IO Unit := do
   c.ratioQuery.set (some (query, changed))
 
 private def styles : String :=
-  ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host{touch-action:none}" ++
+  ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host([data-touch-action=none]){touch-action:none}:host([data-touch-action=pan-y]){touch-action:pan-y}:host([data-touch-action=pan-xy]){touch-action:pan-x pan-y}" ++
   ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:pre;box-sizing:border-box;padding:var(--inkproof-tooltip-padding,2px 6px);color:var(--inkproof-tooltip-color,inherit);background:var(--inkproof-tooltip-background,#fff);border:var(--inkproof-tooltip-border-width,1px) solid var(--inkproof-tooltip-border-color,#888);border-radius:var(--inkproof-tooltip-border-radius,0);box-shadow:var(--inkproof-tooltip-shadow,none);font:var(--inkproof-tooltip-font-size,12px) var(--inkproof-tooltip-font-family,sans-serif)}" ++
   ".legend{position:absolute;top:0;right:0;display:flex;font:12px sans-serif}.legend button,.legend .entry{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit}.legend button{cursor:pointer}" ++
   ".legend[data-layout=vertical]{flex-direction:column}.legend[data-layout=horizontal]{flex-direction:row;flex-wrap:wrap;align-items:center;gap:0 12px;max-width:100%}" ++
@@ -380,7 +383,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipStyle := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipStyle := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -619,6 +622,19 @@ private def navigable (c : Chart) : IO (Option (Scene × NavConfig × Nav)) := d
   let some nav ← c.nav.get | return none
   return some (scene, ⟨config, scene.access.points, scene.access.series.size⟩, nav)
 
+/-- Tell the stylesheet which touch gestures the chart takes from the browser. -/
+private def syncTouch (c : Chart) : IO Unit := do
+  let hasView := (← c.scene.get).any (·.access.view.isSome)
+  let action := TouchAction.of hasView (← c.touchMode.get) (← c.dragMode.get) (← c.selectMode.get)
+  let value := match action with
+    | .auto => none
+    | .panY => some "pan-y"
+    | .panXY => some "pan-xy"
+    | .none => some "none"
+  match value with
+  | some v => c.el.callMethod "setAttribute" #[toJS "data-touch-action", toJS v] Unit
+  | none => c.el.callMethod "removeAttribute" #[toJS "data-touch-action"] Unit
+
 private def onKey (c : Chart) (event : Value) : IO Unit := do
   let some (scene, navConfig, nav) ← navigable c | return
   let held (flag : String) : IO Bool := event.get flag Bool
@@ -643,6 +659,8 @@ private def applyInputs (c : Chart) (inputs : List (Input Float)) : IO Unit := d
 
 private def onWheel (c : Chart) (event : Value) : IO Unit := do
   if (← c.selectMode.get) != .off then return
+  let held (flag : String) : IO Bool := event.get flag Bool
+  unless (← c.wheelMode.get).zooms (← held "ctrlKey") (← held "metaKey") do return
   let some (_, navConfig, _) ← navigable c | return
   let pos ← position c event
   unless Gesture.inside navConfig.view pos do return
@@ -662,6 +680,7 @@ private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
   let id ← event.get "pointerId" Nat
   let p ← position c event
   unless Gesture.inside navConfig.view p do return
+  if (← event.get "pointerType" String) == "touch" && (← c.touchMode.get) == .off then return
   if (← c.selectMode.get) != .off then
     if (← c.selectDrag.get).isNone then
       try c.el.callMethod "setPointerCapture" #[toJS id] Unit
@@ -669,11 +688,14 @@ private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
       let x := dataX navConfig nav p
       c.selectDrag.set (some (Selection.press (Select.config navConfig.view) (← c.band.get) x))
     return
+  let mode ← c.dragMode.get
+  -- A mouse has no gesture but the drag; a touch is still tracked for a pinch.
+  if mode == .off && (← event.get "pointerType" String) != "touch" then return
   c.pointers.modify (·.filter (·.1 != id) |>.push (id, p))
   -- A pointer the browser no longer considers active cannot be captured; the gesture still works.
   try c.el.callMethod "setPointerCapture" #[toJS id] Unit
   catch e => log .warn "pointer capture failed, continuing without it" [("error", toString e)]
-  let boxes := (← c.dragMode.get).boxes (← event.get "shiftKey" Bool)
+  let boxes := mode.boxes (← event.get "shiftKey" Bool)
   c.boxStart.set (if (← c.pointers.get).size == 1 && boxes then some p else none)
 
 /-- A click on a legend entry hides or shows its series, and tells the application, which answers by drawing the scene without it. -/
@@ -717,7 +739,7 @@ private def onPointerMove (c : Chart) (event : Value) : IO Unit := do
     | #[(_, o₁), (_, o₂)], #[(_, n₁), (_, n₂)] =>
       applyInputs c (Gesture.pinch (toView o₁) (toView o₂) (toView n₁) (toView n₂))
     | #[(_, old)], _ =>
-      if (← c.boxStart.get).isNone then
+      if (← c.boxStart.get).isNone && (← c.dragMode.get) != .off then
         let o := toView old
         let n := toView p
         applyInputs c [.drag (n.1 - o.1) (n.2 - o.2)]
@@ -752,6 +774,8 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   let boxAxes ← getAttr c.el "box-zoom"
   let boxMin ← getAttr c.el "box-min"
   let drag ← getAttr c.el "drag"
+  let wheelName ← getAttr c.el "wheel"
+  let touchName ← getAttr c.el "touch"
   let groupName ← getAttr c.el "group"
   let cursorName ← getAttr c.el "cursor"
   let dotted ← getAttr c.el "cursor-dotted"
@@ -763,11 +787,13 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   | .error message, _, _, _, _, _ | _, .error message, _, _, _, _ | _, _, .error message, _, _, _ | _, _, _, .error message, _, _
   | _, _, _, _, .error message, _ | _, _, _, _, _, .error message => fail c message []
   | .ok attrs, .ok box, .ok mode, .ok group, .ok cursor, .ok select =>
-    match Tooltip.parse tooltipName, Legend.parseStyle legendName with
-    | .error message, _ | _, .error message => fail c message []
-    | .ok tooltip, .ok legend =>
+    match Tooltip.parse tooltipName, Legend.parseStyle legendName, WheelMode.parse wheelName, TouchMode.parse touchName with
+    | .error message, _, _, _ | _, .error message, _, _ | _, _, .error message, _ | _, _, _, .error message => fail c message []
+    | .ok tooltip, .ok legend, .ok wheel, .ok touch =>
       c.tooltipStyle.set tooltip
       setLegendStyle c legend
+      c.wheelMode.set wheel
+      c.touchMode.set touch
     c.cursorMode.set cursor
     c.cursorDotted.set dotted.isSome
     c.selectMode.set select
@@ -784,6 +810,7 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
       -- A newer load or a disconnect has overtaken this one.
       if (← c.generation.get) == generation && (← c.alive.get) then
         c.scene.set (some scene)
+        syncTouch c
         adoptTraces c scene
         publish c scene.access
         refreshProbe c
@@ -803,6 +830,7 @@ def setScene (el : Value) (scene : Scene) : IO Unit := do
   unless (← c.alive.get) do return
   let kept := (← c.nav.get).map (Nav.clamp scene.access.points scene.access.series.size)
   c.scene.set (some scene)
+  syncTouch c
   adoptTraces c scene
   c.nav.set (match scene.access.view, kept with
     | some _, some nav => some nav
@@ -972,8 +1000,21 @@ private def reselect (c : Chart) (value : Option String) : IO Unit := do
   | .ok mode =>
     c.selectMode.set mode
     c.selectDrag.set none
+    syncTouch c
     if mode == .off then applyBand c none
     invalidate c
+
+/-- A change of `wheel`, `touch` or `drag` takes effect for the next gesture, without reloading the chart. -/
+private def reinput (c : Chart) (wheel touch drag : Option String) : IO Unit := do
+  match WheelMode.parse wheel, TouchMode.parse touch, DragMode.parse drag with
+  | .error message, _, _ | _, .error message, _ | _, _, .error message => fail c message []
+  | .ok w, .ok t, .ok d =>
+    c.wheelMode.set w
+    c.touchMode.set t
+    c.dragMode.set d
+    c.pointers.set #[]
+    c.boxStart.set none
+    syncTouch c
 
 private def changed (loader : Loader) (args : Array Data) : Async Unit := do
   if let some c ← chartOf args then
@@ -986,13 +1027,15 @@ private def changed (loader : Loader) (args : Array Data) : Async Unit := do
         invalidate c
       | some (.string "select") => reselect c (← getAttr c.el "select")
       | some (.string "tooltip") | some (.string "legend") => reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend")
+      | some (.string "wheel") | some (.string "touch") | some (.string "drag") =>
+        reinput c (← getAttr c.el "wheel") (← getAttr c.el "touch") (← getAttr c.el "drag")
       | _ => load c loader
 
 private def define (tag : String) (loader : Loader) (resizes buttons : Bool) : IO Unit := do
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor", "select", "tooltip", "legend", "cursor-dotted"]
+  defineElement tag #["src", "log-level", "group", "cursor", "select", "tooltip", "legend", "cursor-dotted", "wheel", "touch", "drag"]
     (← Function.ofFn (connect loader resizes · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))
