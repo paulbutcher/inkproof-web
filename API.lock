@@ -547,6 +547,7 @@ def Inkproof.Web.nearestBy : {α : Type} → Array (Float × α) → Float → O
 theorem Inkproof.Web.nearestBy_mem : ∀ {α : Type} (ps : Array (Float × α)) (x : Float) (p : Float × α), Inkproof.Web.nearestBy ps x = Option.some p → p ∈ ps.toList
 theorem Inkproof.Web.nearestBy_not_nan : ∀ {α : Type} (ps : Array (Float × α)) (x : Float) (p : Float × α), Inkproof.Web.nearestBy ps x = Option.some p → p.fst.isNaN = Bool.false
 def Inkproof.Web.showFloat : Float → String
-theorem Inkproof.Web.showFloat_eq : ∀ (f : Float), Inkproof.Web.showFloat f = if (ToString.toString f).contains '.' = Bool.true then (((ToString.toString f).dropEndWhile fun x => x == '0').dropEndWhile fun x => x == '.').toString else ToString.toString f
+theorem Inkproof.Web.showFloat_eq : ∀ (f : Float) (w fr : List Char), ¬'.' ∈ w → (ToString.toString f).toList = w ++ '.' :: fr → Inkproof.Web.showFloat f = String.ofList (if (Inkproof.Core.Decimal.trimFrac fr).isEmpty = Bool.true then w else w ++ '.' :: Inkproof.Core.Decimal.trimFrac fr)
+theorem Inkproof.Web.showFloat_of_not_mem : ∀ (f : Float), ¬'.' ∈ (ToString.toString f).toList → Inkproof.Web.showFloat f = ToString.toString f
 def Inkproof.Web.showNumber : Option Inkproof.Axis.NumberFormat → Float → String
 theorem Inkproof.Web.showNumber_eq : ∀ (fmt : Option Inkproof.Axis.NumberFormat) (x : Float), Inkproof.Web.showNumber fmt x = (fmt.bind fun x_1 => x_1.format x).getD (Inkproof.Web.showFloat x)

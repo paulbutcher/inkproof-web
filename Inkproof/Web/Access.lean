@@ -3,6 +3,7 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import Inkproof.Axis.NumberFormat
+import Inkproof.Core.Proofs.Decimal
 import Inkproof.Float.RatLemmas
 import Inkproof.Viewport.View
 import Inkproof.Web.Probe
@@ -139,13 +140,15 @@ structure Access where
   groups : Array ValueGroup := #[]
 
 /-- A number as people write it: no trailing zeros, and no point on a whole number. -/
-def showFloat (f : Float) : String :=
-  let s := toString f
-  if s.contains '.' then ((s.dropEndWhile (· == '0')).dropEndWhile (· == '.')).toString else s
+def showFloat (f : Float) : String := String.ofList (Inkproof.Core.Decimal.trimZeros (toString f).toList)
 
-theorem showFloat_eq (f : Float) :
-    showFloat f = if (toString f).contains '.' then
-      (((toString f).dropEndWhile (· == '0')).dropEndWhile (· == '.')).toString else toString f := rfl
+theorem showFloat_eq (f : Float) (w fr : List Char) (hw : '.' ∉ w) (h : (toString f).toList = w ++ '.' :: fr) :
+    showFloat f = String.ofList (if (Inkproof.Core.Decimal.trimFrac fr).isEmpty then w
+      else w ++ '.' :: Inkproof.Core.Decimal.trimFrac fr) := by
+  simp [showFloat, h, Inkproof.Core.Decimal.trimZeros_spec w fr hw]
+
+theorem showFloat_of_not_mem (f : Float) (h : '.' ∉ (toString f).toList) : showFloat f = toString f := by
+  simp [showFloat, Inkproof.Core.Decimal.trimZeros_of_not_mem _ h]
 
 /-- `x` as the format writes it; with no format, or for a value it cannot write such as NaN or an infinity, as `showFloat` does. -/
 def showNumber (fmt : Option Inkproof.Axis.NumberFormat) (x : Float) : String :=

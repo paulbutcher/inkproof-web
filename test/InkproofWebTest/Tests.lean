@@ -155,6 +155,11 @@ def numberFormatCase : TestCase :=
         bad "de fr" && bad "2dp 3dp" && bad "compact compact" && bad "pretty")
       s!"{big} {de} {Legend.text (fmt "compact") row}"
 
+def showFloatCase : TestCase :=
+  .mk "showFloat drops trailing zeros and a bare point" do
+    let got := [0.0, 1.5, 100.0, 0.000001, 0.0 / 0.0, 1.0 / 0.0].map showFloat
+    check (got == ["0", "1.5", "100", "0.000001", "NaN", "inf"]) s!"{got}"
+
 /-- Wherever the anchor and however far the offset, a tooltip that fits in the chart lies inside it. -/
 def tooltipPlaceCase : TestCase :=
   .mk "a tooltip that fits in the chart is placed inside it" <|
@@ -178,6 +183,6 @@ def tooltipParseCase : TestCase :=
     check (bad "shared xy" && bad "x xy" && bad "top-left top-right" && bad "12 13" && bad "wide" && offset) "tooltip words"
 
 def tests : List TestCase :=
-  [markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase, numberFormatCase]
+  [markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase, numberFormatCase, showFloatCase]
 
 end InkproofWebTest
