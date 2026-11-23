@@ -3,6 +3,7 @@
 ## [0.20.0]
 
 - The `legend` attribute is a list of words: placement, layout (row or column), `static`, and which cursor readouts show (`x`, `y`, `no-x`, `no-y`); existing values are unchanged.
+- The `tooltip` attribute is a list of words: its anchor (`point` or `pointer`), the corner it opens from and its offset, `shared` for every series at the cursor's x and `no-x-value`; it stays inside the chart, and a page styles it with `--inkproof-tooltip-*` custom properties or `::part(tooltip)`; existing values are unchanged.
 
 ## [0.19.1]
 

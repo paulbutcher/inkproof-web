@@ -16,6 +16,7 @@ import Inkproof.Web.Pointer
 import Inkproof.Web.Box
 import Inkproof.Web.Cursor
 import Inkproof.Web.Legend
+import Inkproof.Web.Tooltip
 import Inkproof.Web.Group
 import Inkproof.Web.Select
 import Inkproof.Web.Events
@@ -125,7 +126,7 @@ private structure Chart where
   dragMode : IO.Ref DragMode
   cursorMode : IO.Ref CursorMode
   cursorDotted : IO.Ref Bool
-  tooltipMode : IO.Ref (Option Metric)
+  tooltipStyle : IO.Ref (Option Tooltip.Style)
   /-- The legend's style, none when it shows no legend. -/
   legendStyle : IO.Ref (Option Legend.Style)
   /-- Which series the legend has hidden, by index. -/
@@ -329,7 +330,7 @@ private partial def watchRatio (c : Chart) (after : IO Unit) : IO Unit := do
 
 private def styles : String :=
   ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host{touch-action:none}" ++
-  ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:nowrap;padding:2px 6px;background:#fff;border:1px solid #888;font:12px sans-serif}" ++
+  ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:pre;box-sizing:border-box;padding:var(--inkproof-tooltip-padding,2px 6px);color:var(--inkproof-tooltip-color,inherit);background:var(--inkproof-tooltip-background,#fff);border:var(--inkproof-tooltip-border-width,1px) solid var(--inkproof-tooltip-border-color,#888);border-radius:var(--inkproof-tooltip-border-radius,0);box-shadow:var(--inkproof-tooltip-shadow,none);font:var(--inkproof-tooltip-font-size,12px) var(--inkproof-tooltip-font-family,sans-serif)}" ++
   ".legend{position:absolute;top:0;right:0;display:flex;font:12px sans-serif}.legend button,.legend .entry{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit}.legend button{cursor:pointer}" ++
   ".legend[data-layout=vertical]{flex-direction:column}.legend[data-layout=horizontal]{flex-direction:row;flex-wrap:wrap;align-items:center;gap:0 12px;max-width:100%}" ++
   ".legend[data-place=top-left]{top:0;right:auto;left:0}.legend[data-place=bottom-left]{top:auto;right:auto;bottom:0;left:0}.legend[data-place=bottom-right]{top:auto;bottom:0;right:0}" ++
@@ -367,6 +368,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
       e.callMethod "remove" #[] Unit
   let tip ← newElement doc "div"
   tip.set "className" "tip"
+  tip.callMethod "setAttribute" #[toJS "part", toJS "tooltip"] Unit
   let legendEl ← newElement doc "div"
   legendEl.set "className" "legend"
   root.callMethod "append" #[toJS tip, toJS legendEl] Unit
@@ -378,7 +380,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipMode := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, tooltipStyle := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -490,21 +492,31 @@ private def showTooltip (c : Chart) (scene : Scene) : IO Unit := do
   let off : IO Unit := do
     c.tip.get "style" Value >>= (·.set "display" "none")
     c.tip.set "textContent" ""
-  let (some metric, some (x, y), some config) := (← c.tooltipMode.get, ← c.cursor.get, scene.access.view) | off
+  let (some tip, some (x, y), some config) := (← c.tooltipStyle.get, ← c.cursor.get, scene.access.view) | off
   let view := ((← c.nav.get).map (·.view)).getD (View.home config)
   let traces ← activeTraces c scene
   let py := (y.map fun y => config.y.length - view.y.toScreen config.y y).getD 0
   let px := view.x.toScreen config.x x
   let screen := traces.map (·.onScreen config view)
-  match Nearest.find metric screen px py, (metric == .plane && y.isNone) with
+  match Nearest.find tip.metric screen px py, (tip.metric == .plane && y.isNone) with
   | some hit, false =>
-    match Legend.tooltip traces hit with
+    let text := if tip.shared then Tooltip.sharedText tip.showX traces x else Tooltip.single tip.showX traces hit
+    match text with
     | some text =>
       let style ← c.tip.get "style" Value
       c.tip.set "textContent" text
-      style.set "left" s!"{scene.access.plotOrigin.1 + hit.x + 8}px"
-      style.set "top" s!"{scene.access.plotOrigin.2 + hit.y - 8}px"
+      style.set "left" "0px"
+      style.set "top" "0px"
       style.set "display" "block"
+      let (ox, oy) := scene.access.plotOrigin
+      let (ax, ay) := match tip.anchor, y with
+        | .pointer, some _ => (px, py)
+        | _, _ => (hit.x, hit.y)
+      let size ← c.tip.callMethod "getBoundingClientRect" #[] Value
+      let (left, top) := tip.place (ox + ax) (oy + ay) (← size.get "width" Float) (← size.get "height" Float)
+        (← c.el.get "clientWidth" Float) (← c.el.get "clientHeight" Float)
+      style.set "left" s!"{left}px"
+      style.set "top" s!"{top}px"
     | none => off
   | _, _ => off
 
@@ -751,10 +763,10 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   | .error message, _, _, _, _, _ | _, .error message, _, _, _, _ | _, _, .error message, _, _, _ | _, _, _, .error message, _, _
   | _, _, _, _, .error message, _ | _, _, _, _, _, .error message => fail c message []
   | .ok attrs, .ok box, .ok mode, .ok group, .ok cursor, .ok select =>
-    match Metric.parse tooltipName, Legend.parseStyle legendName with
+    match Tooltip.parse tooltipName, Legend.parseStyle legendName with
     | .error message, _ | _, .error message => fail c message []
     | .ok tooltip, .ok legend =>
-      c.tooltipMode.set tooltip
+      c.tooltipStyle.set tooltip
       setLegendStyle c legend
     c.cursorMode.set cursor
     c.cursorDotted.set dotted.isSome
@@ -946,10 +958,10 @@ private def recursor (c : Chart) (value : Option String) : IO Unit := do
 
 /-- A change of `tooltip` or `legend` redraws them without reloading the chart. -/
 private def reprobe (c : Chart) (tooltip legend : Option String) : IO Unit := do
-  match Metric.parse tooltip, Legend.parseStyle legend with
+  match Tooltip.parse tooltip, Legend.parseStyle legend with
   | .error message, _ | _, .error message => fail c message []
   | .ok t, .ok l =>
-    c.tooltipMode.set t
+    c.tooltipStyle.set t
     setLegendStyle c l
     refreshProbe c
 

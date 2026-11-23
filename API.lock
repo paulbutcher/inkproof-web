@@ -176,6 +176,9 @@ theorem Inkproof.Web.Legend.parseStyle_y : (Inkproof.Web.Legend.parseStyle (Opti
 theorem Inkproof.Web.Legend.parse_bottom : Inkproof.Web.Legend.parse (Option.some "bottom") = Except.ok Bool.true
 theorem Inkproof.Web.Legend.parse_empty : Inkproof.Web.Legend.parse (Option.some "") = Except.ok Bool.true
 theorem Inkproof.Web.Legend.parse_none : Inkproof.Web.Legend.parse Option.none = Except.ok Bool.false
+def Inkproof.Web.Legend.pick : {α : Type} → [BEq α] → Option α → α → Option (Option α)
+theorem Inkproof.Web.Legend.pick_none : ∀ {α : Type} [inst : BEq α] (new : α), Inkproof.Web.Legend.pick Option.none new = Option.some (Option.some new)
+theorem Inkproof.Web.Legend.pick_some : ∀ {α : Type} [inst : BEq α] (o new : α), Inkproof.Web.Legend.pick (Option.some o) new = if (o == new) = Bool.true then Option.some (Option.some o) else Option.none
 def Inkproof.Web.Legend.readout : Bool → Bool → Float → Option Float → Option String
 theorem Inkproof.Web.Legend.readout_eq : ∀ (showX showY : Bool) (x : Float) (y : Option Float), Inkproof.Web.Legend.readout showX showY x y = match showX, showY, y with | Bool.true, Bool.true, Option.some y => Option.some (ToString.toString "x: " ++ ToString.toString (Inkproof.Web.showFloat x) ++ ToString.toString ", y: " ++ ToString.toString (Inkproof.Web.showFloat y)) | Bool.true, x_1, x_2 => Option.some (ToString.toString "x: " ++ ToString.toString (Inkproof.Web.showFloat x)) | Bool.false, Bool.true, Option.some y => Option.some (ToString.toString "y: " ++ ToString.toString (Inkproof.Web.showFloat y)) | Bool.false, x, x_1 => Option.none
 theorem Inkproof.Web.Legend.readout_none : ∀ (x : Float) (y : Option Float), Inkproof.Web.Legend.readout Bool.false Bool.false x y = Option.none
@@ -190,6 +193,8 @@ theorem Inkproof.Web.Legend.toggle_hidden : ∀ (traces : Array Inkproof.Web.Tra
 theorem Inkproof.Web.Legend.toggle_size : ∀ (traces : Array Inkproof.Web.Trace) (i : Nat), (Inkproof.Web.Legend.toggle traces i).size = traces.size
 def Inkproof.Web.Legend.tooltip : Array Inkproof.Web.Trace → Inkproof.Web.Candidate → Option String
 theorem Inkproof.Web.Legend.tooltip_eq : ∀ (traces : Array Inkproof.Web.Trace) (c : Inkproof.Web.Candidate) (t : Inkproof.Web.Trace) (x y : Float), traces[c.series]? = Option.some t → t.xs[c.point]? = Option.some x → t.ys[c.point]? = Option.some y → Inkproof.Web.Legend.tooltip traces c = Option.some (ToString.toString t.name ++ ToString.toString ": " ++ ToString.toString (Inkproof.Web.showFloat x) ++ ToString.toString ", " ++ ToString.toString (Inkproof.Web.showFloat y))
+def Inkproof.Web.Legend.words : String → List String
+theorem Inkproof.Web.Legend.words_empty : Inkproof.Web.Legend.words "" = []
 structure Inkproof.Web.LegendRow : Type
 field Inkproof.Web.LegendRow.color : Inkproof.Web.LegendRow → String
 field Inkproof.Web.LegendRow.hidden : Inkproof.Web.LegendRow → Bool
@@ -327,6 +332,38 @@ def Inkproof.Web.TextCache.measurer : Inkproof.Web.TextCache → String → Stri
 theorem Inkproof.Web.TextCache.measurer_insert : ∀ (c : Inkproof.Web.TextCache) (font text : String) (size : Float × Float), (c.insert font text size).measurer font text = size
 constructor Inkproof.Web.TextCache.mk : Std.HashMap (String × String) (Float × Float) → Inkproof.Web.TextCache
 field Inkproof.Web.TextCache.sizes : Inkproof.Web.TextCache → Std.HashMap (String × String) (Float × Float)
+inductive Inkproof.Web.Tooltip.Anchor : Type
+def Inkproof.Web.Tooltip.Anchor.ofNat : Nat → Inkproof.Web.Tooltip.Anchor
+theorem Inkproof.Web.Tooltip.Anchor.ofNat_ctorIdx : ∀ (x : Inkproof.Web.Tooltip.Anchor), Inkproof.Web.Tooltip.Anchor.ofNat x.ctorIdx = x
+constructor Inkproof.Web.Tooltip.Anchor.point : Inkproof.Web.Tooltip.Anchor
+constructor Inkproof.Web.Tooltip.Anchor.pointer : Inkproof.Web.Tooltip.Anchor
+structure Inkproof.Web.Tooltip.Style : Type
+field Inkproof.Web.Tooltip.Style.anchor : Inkproof.Web.Tooltip.Style → Inkproof.Web.Tooltip.Anchor
+field Inkproof.Web.Tooltip.Style.metric : Inkproof.Web.Tooltip.Style → Inkproof.Web.Metric
+constructor Inkproof.Web.Tooltip.Style.mk : Inkproof.Web.Metric → Bool → Bool → Inkproof.Web.Tooltip.Anchor → Bool → Bool → Nat → Inkproof.Web.Tooltip.Style
+field Inkproof.Web.Tooltip.Style.offset : Inkproof.Web.Tooltip.Style → Nat
+def Inkproof.Web.Tooltip.Style.place : Inkproof.Web.Tooltip.Style → Float → Float → Float → Float → Float → Float → Float × Float
+theorem Inkproof.Web.Tooltip.Style.place_eq : ∀ (s : Inkproof.Web.Tooltip.Style) (x y w h width height : Float), s.place x y w h width height = (Inkproof.Web.Tooltip.Style.start s.offset.toFloat x w width s.right, if s.top = Bool.true then Inkproof.Web.Tooltip.fit (y - s.offset.toFloat) (y + s.offset.toFloat - h) h height else Inkproof.Web.Tooltip.fit (y + s.offset.toFloat - h) (y - s.offset.toFloat) h height)
+field Inkproof.Web.Tooltip.Style.right : Inkproof.Web.Tooltip.Style → Bool
+field Inkproof.Web.Tooltip.Style.shared : Inkproof.Web.Tooltip.Style → Bool
+field Inkproof.Web.Tooltip.Style.showX : Inkproof.Web.Tooltip.Style → Bool
+def Inkproof.Web.Tooltip.Style.start : Float → Float → Float → Float → Bool → Float
+theorem Inkproof.Web.Tooltip.Style.start_eq : ∀ (offset anchor size bound : Float) (forward : Bool), Inkproof.Web.Tooltip.Style.start offset anchor size bound forward = if forward = Bool.true then Inkproof.Web.Tooltip.fit (anchor + offset) (anchor - offset - size) size bound else Inkproof.Web.Tooltip.fit (anchor - offset - size) (anchor + offset) size bound
+field Inkproof.Web.Tooltip.Style.top : Inkproof.Web.Tooltip.Style → Bool
+def Inkproof.Web.Tooltip.fit : Float → Float → Float → Float → Float
+theorem Inkproof.Web.Tooltip.fit_eq : ∀ (first second size bound : Float), Inkproof.Web.Tooltip.fit first second size bound = if (Decidable.decide (0 ≤ first) && Decidable.decide (first + size ≤ bound)) = Bool.true then first else if (Decidable.decide (0 ≤ second) && Decidable.decide (second + size ≤ bound)) = Bool.true then second else Max.max 0 (Min.min first (bound - size))
+instance Inkproof.Web.Tooltip.instDecidableEqAnchor : DecidableEq Inkproof.Web.Tooltip.Anchor
+instance Inkproof.Web.Tooltip.instReprAnchor : Repr Inkproof.Web.Tooltip.Anchor
+def Inkproof.Web.Tooltip.instReprAnchor.repr : Inkproof.Web.Tooltip.Anchor → Nat → Std.Format
+def Inkproof.Web.Tooltip.parse : Option String → Except String (Option Inkproof.Web.Tooltip.Style)
+theorem Inkproof.Web.Tooltip.parse_none : Inkproof.Web.Tooltip.parse Option.none = Except.ok Option.none
+theorem Inkproof.Web.Tooltip.parse_off : Inkproof.Web.Tooltip.parse (Option.some "off") = Except.ok Option.none
+theorem Inkproof.Web.Tooltip.parse_some : ∀ (s : String), Inkproof.Web.Tooltip.parse (Option.some s) = if s = "off" then Except.ok Option.none else match (List.foldlM Inkproof.Web.Tooltip.choose✝ { } (Inkproof.Web.Legend.words s)).bind Inkproof.Web.Tooltip.finish✝ with | Option.some style => Except.ok (Option.some style) | Option.none => Except.error (ToString.toString "attribute tooltip is \"" ++ ToString.toString s ++ ToString.toString "\", expected " ++ ToString.toString Inkproof.Web.Tooltip.forms✝)
+def Inkproof.Web.Tooltip.sharedText : Bool → Array Inkproof.Web.Trace → Float → Option String
+theorem Inkproof.Web.Tooltip.sharedText_eq : ∀ (showX : Bool) (traces : Array Inkproof.Web.Trace) (x : Float), (Array.filter (fun x => !x.hidden) (Inkproof.Web.Legend.rows traces (Option.some x))).isEmpty = Bool.false → Inkproof.Web.Tooltip.sharedText showX traces x = Option.some ("\n".intercalate ((if showX = Bool.true then [ToString.toString "x: " ++ ToString.toString (Inkproof.Web.showFloat x)] else []) ++ (Array.map Inkproof.Web.Legend.text (Array.filter (fun x => !x.hidden) (Inkproof.Web.Legend.rows traces (Option.some x)))).toList))
+theorem Inkproof.Web.Tooltip.sharedText_none_of_hidden : ∀ (showX : Bool) (traces : Array Inkproof.Web.Trace) (x : Float), (∀ (t : Inkproof.Web.Trace), t ∈ traces → t.hidden = Bool.true) → Inkproof.Web.Tooltip.sharedText showX traces x = Option.none
+def Inkproof.Web.Tooltip.single : Bool → Array Inkproof.Web.Trace → Inkproof.Web.Candidate → Option String
+theorem Inkproof.Web.Tooltip.single_eq : ∀ (showX : Bool) (traces : Array Inkproof.Web.Trace) (c : Inkproof.Web.Candidate) (t : Inkproof.Web.Trace) (x y : Float), traces[c.series]? = Option.some t → t.xs[c.point]? = Option.some x → t.ys[c.point]? = Option.some y → Inkproof.Web.Tooltip.single showX traces c = Option.some (if showX = Bool.true then ToString.toString t.name ++ ToString.toString ": " ++ ToString.toString (Inkproof.Web.showFloat x) ++ ToString.toString ", " ++ ToString.toString (Inkproof.Web.showFloat y) else ToString.toString t.name ++ ToString.toString ": " ++ ToString.toString (Inkproof.Web.showFloat y))
 structure Inkproof.Web.Trace : Type
 field Inkproof.Web.Trace.color : Inkproof.Web.Trace → String
 field Inkproof.Web.Trace.hidden : Inkproof.Web.Trace → Bool

@@ -920,3 +920,73 @@ test('a clipped draw covers the whole plot at any device pixel ratio', async () 
     await context.close();
   }
 });
+
+test('the tooltip stays inside the chart, moves by its offset and takes its look from custom properties', async () => {
+  const { page, context } = await open('/tooltip.html');
+  await drawn(page, 1);
+  const move = (x, y) => page.evaluate(([x, y]) => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: rect.left + x, clientY: rect.top + y }));
+  }, [x, y]);
+  const set = tooltip => page.evaluate(t => document.getElementById('a').setAttribute('tooltip', t), tooltip);
+  // The tooltip and the chart, in pixels from the chart's top left.
+  const boxes = () => page.evaluate(() => {
+    const el = document.getElementById('a');
+    const host = el.getBoundingClientRect();
+    const r = el.shadowRoot.querySelector('.tip').getBoundingClientRect();
+    return { left: r.left - host.left, top: r.top - host.top, right: r.right - host.left, bottom: r.bottom - host.top, width: host.width, height: host.height };
+  });
+  for (const words of ['xy top-right 150', 'xy top-left 150', 'xy bottom-right 150', 'xy bottom-left 150', 'xy pointer bottom-right 40']) {
+    for (const [x, y] of [[395, 195], [5, 5], [395, 5], [200, 100]]) {
+      await set(words);
+      await move(x, y);
+      const b = await boxes();
+      assert.ok(b.left >= 0 && b.top >= 0 && b.right <= b.width && b.bottom <= b.height, `"${words}" at ${x},${y} lies outside the chart: ${JSON.stringify(b)}`);
+    }
+  }
+  await set('xy pointer 8');
+  await move(150, 100);
+  const near = await boxes();
+  await set('xy pointer 28');
+  await move(150, 100);
+  const far = await boxes();
+  assert.ok(Math.abs(far.left - near.left - 20) < 1 && Math.abs(near.top - far.top - 20) < 1, `an offset of 28 rather than 8 moves it 20 pixels, got ${JSON.stringify([near, far])}`);
+  await set('xy pointer bottom-left 8');
+  await move(150, 100);
+  const flipped = await boxes();
+  assert.ok(Math.abs(flipped.right - 142) < 1 && Math.abs(flipped.bottom - 108) < 1, `opening bottom-left puts the corner 8 pixels from the pointer, got ${JSON.stringify(flipped)}`);
+  await set('shared no-x-value');
+  await move(100, 100);
+  const shared = await page.evaluate(() => document.getElementById('a').shadowRoot.querySelector('.tip').textContent);
+  assert.equal(shared, 'North: 30\nSouth: 70', 'a shared tooltip lists every series at the cursor x');
+  await set('shared');
+  assert.equal(await page.evaluate(() => document.getElementById('a').shadowRoot.querySelector('.tip').textContent), 'x: 25\nNorth: 30\nSouth: 70');
+  await page.evaluate(() => {
+    const el = document.getElementById('a');
+    el.style.setProperty('--inkproof-tooltip-color', 'rgb(1, 2, 3)');
+    el.style.setProperty('--inkproof-tooltip-background', 'rgb(4, 5, 6)');
+    el.style.setProperty('--inkproof-tooltip-border-color', 'rgb(7, 8, 9)');
+    el.style.setProperty('--inkproof-tooltip-border-width', '3px');
+    el.style.setProperty('--inkproof-tooltip-border-radius', '5px');
+    el.style.setProperty('--inkproof-tooltip-font-size', '19px');
+    el.style.setProperty('--inkproof-tooltip-font-family', 'monospace');
+    el.style.setProperty('--inkproof-tooltip-padding', '9px');
+    el.style.setProperty('--inkproof-tooltip-shadow', 'rgb(10, 11, 12) 1px 1px 2px');
+  });
+  const look = await page.evaluate(() => {
+    const s = getComputedStyle(document.getElementById('a').shadowRoot.querySelector('.tip'));
+    return [s.color, s.backgroundColor, s.borderTopColor, s.borderTopWidth, s.borderTopLeftRadius, s.fontSize, s.fontFamily, s.paddingTop, s.boxShadow];
+  });
+  assert.deepEqual(look, ['rgb(1, 2, 3)', 'rgb(4, 5, 6)', 'rgb(7, 8, 9)', '3px', '5px', '19px', 'monospace', '9px', 'rgb(10, 11, 12) 1px 1px 2px 0px']);
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
+test('a tooltip with words that contradict each other is refused', async () => {
+  const { page, context } = await open('/tooltip.html');
+  await drawn(page, 1);
+  await page.evaluate(() => document.getElementById('a').setAttribute('tooltip', 'shared xy'));
+  assert.equal((await page.evaluate(() => window.errors)).length, 1);
+  await context.close();
+});

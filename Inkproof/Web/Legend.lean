@@ -269,10 +269,16 @@ private structure Choices where
   showX : Option Bool := none
   showY : Option Bool := none
 
-private def pick {α : Type} [BEq α] (old : Option α) (new : α) : Option (Option α) :=
+/-- Record `new` as the choice of a kind of word, unless the kind already has a different one. -/
+def pick {α : Type} [BEq α] (old : Option α) (new : α) : Option (Option α) :=
   match old with
   | none => some (some new)
   | some o => if o == new then some old else none
+
+theorem pick_none {α : Type} [BEq α] (new : α) : pick none new = some (some new) := rfl
+
+theorem pick_some {α : Type} [BEq α] (o new : α) :
+    pick (some o) new = if o == new then some (some o) else none := rfl
 
 private def forms : String :=
   "on, off, static, bottom, top-left, top-right, bottom-left, bottom-right, below-left, below-center, below-right, vertical, horizontal, x, y, no-x or no-y, each form at most once and no two of a kind"
@@ -307,7 +313,7 @@ private def finish (c : Choices) : Style :=
     showY := c.showY.getD c.live }
 
 /-- The words of `s`, which are separated by spaces. -/
-private def words (s : String) : List String :=
+def words (s : String) : List String :=
   (s.toList.foldr (fun c (acc : List (List Char)) =>
     match c, acc with
     | ' ', [] => []
@@ -315,6 +321,10 @@ private def words (s : String) : List String :=
     | ' ', _ => [] :: acc
     | c, [] => [[c]]
     | c, w :: ws => (c :: w) :: ws) []).filter (· ≠ []) |>.map String.ofList
+
+theorem words_empty : words "" = [] := by decide
+
+-- A general equation for `words` (splitting on spaces and dropping empty words) was not closed: the fold over the characters needs an induction invariant on its accumulator that was out of reach in a few tries.
 
 /-- Validate the raw `legend` attribute: a missing one or `off` shows none. Otherwise it is a list of words in any order, each kind at most once: `on` (or empty) for the default, which overlays the plot at its top right; a placement, which is `top-left`, `top-right`, `bottom-left` or `bottom-right` over the plot, or `below-left`, `below-center` or `below-right` (`bottom` for the last) in room of its own below it; a layout, `vertical` or `horizontal`, which is a column over the plot and a row below it unless given; `static` to leave out the values; and `x`, `y`, `no-x` or `no-y` to show or hide each cursor position, which are shown when the values are. -/
 def parseStyle : Option String → Except String (Option Style)

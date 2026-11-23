@@ -87,7 +87,29 @@ def legendWordsCase : TestCase :=
         (Legend.groupRows g (some 1)).map Legend.text == #["a: on", "b: -"])
       s!"{at8} {last}"
 
+/-- Wherever the anchor and however far the offset, a tooltip that fits in the chart lies inside it. -/
+def tooltipPlaceCase : TestCase :=
+  .mk "a tooltip that fits in the chart is placed inside it" <|
+    forAll 500 (fun g =>
+        let (x, g) := g.below 500
+        let (y, g) := g.below 300
+        let (o, g) := g.below 400
+        let (k, g) := g.below 4
+        ((x, y, o, k), g))
+      fun (x, y, o, k) =>
+        let style : Tooltip.Style := { metric := .x, shared := false, showX := true, anchor := .point, right := k % 2 == 0, top := k < 2, offset := o }
+        let (l, t) := style.place x.toFloat y.toFloat 90 20 400 200
+        check (0 ≤ l && l + 90 ≤ 400 && 0 ≤ t && t + 20 ≤ 200) s!"{x} {y} {o} {k}: {l} {t}"
+
+def tooltipParseCase : TestCase :=
+  .mk "a tooltip attribute is refused when its words contradict each other" do
+    let bad (s : String) := match Tooltip.parse (some s) with | .error _ => true | .ok _ => false
+    let offset := match Tooltip.parse (some "xy pointer bottom-left 12") with
+      | .ok (some s) => s.offset == 12 && s.anchor == .pointer && !s.top && !s.right && s.metric == .plane
+      | _ => false
+    check (bad "shared xy" && bad "x xy" && bad "top-left top-right" && bad "12 13" && bad "wide" && offset) "tooltip words"
+
 def tests : List TestCase :=
-  [legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase, dragCase, legendGapCase]
+  [tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, boxMinCase, dragCase, legendGapCase]
 
 end InkproofWebTest
