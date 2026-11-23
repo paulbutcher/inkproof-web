@@ -1,9 +1,18 @@
 # Changelog
 
+## [0.21.0]
+
+- The `wheel` (`zoom`, `ctrl`, `off`), `touch` (`on`, `off`) and `drag` (`off`) attributes turn each input on or off.
+- A chart passes unused wheel, touch and drag input to the browser.
+- A chart with no view or a range selector no longer blocks touch scrolling.
+- `WheelMode` and `TouchMode` are the pure parts of the new attributes.
+- The `markers` attribute (`off`, `all`, `nearest`) draws a marker on each series at the cursor.
+- `marker-size` sizes the markers and `marker-fill` fills or outlines them.
+- `Trace.hollow` marks a series whose markers are hollow, which the cursor marker fills.
+
 ## [0.20.0]
 
 - The `legend` attribute is a list of words: placement, layout (row or column), `static`, and which cursor readouts show (`x`, `y`, `no-x`, `no-y`); existing values are unchanged.
-- The `markers` attribute (`off`, `all`, `nearest`) draws a marker on each series at the cursor, sized by `marker-size` and filled or outlined by `marker-fill`; `Trace.hollow` marks a series whose markers are hollow, which the cursor marker fills.
 - The `tooltip` attribute is a list of words: its anchor (`point` or `pointer`), the corner it opens from and its offset, `shared` for every series at the cursor's x and `no-x-value`; it stays inside the chart, and a page styles it with `--inkproof-tooltip-*` custom properties or `::part(tooltip)`; existing values are unchanged.
 
 ## [0.19.1]
