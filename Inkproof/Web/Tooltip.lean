@@ -116,33 +116,33 @@ theorem Style.place_eq (s : Style) (x y w h width height : Float) :
        else fit (y + s.offset.toFloat - h) (y - s.offset.toFloat) h height) := rfl
 
 /-- What a tooltip at `c` reads: the series, the point's x unless left out, and its y. -/
-def single (showX : Bool) (traces : Array Trace) (c : Candidate) : Option String := do
+def single (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Trace) (c : Candidate) : Option String := do
   let t ← traces[c.series]?
   let x ← t.xs[c.point]?
   let y ← t.ys[c.point]?
-  some (if showX then s!"{t.name}: {showFloat x}, {showFloat y}" else s!"{t.name}: {showFloat y}")
+  some (if showX then s!"{t.name}: {showNumber fmt x}, {showNumber fmt y}" else s!"{t.name}: {showNumber fmt y}")
 
-theorem single_eq (showX : Bool) (traces : Array Trace) (c : Candidate) (t : Trace) (x y : Float)
+theorem single_eq (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Trace) (c : Candidate) (t : Trace) (x y : Float)
     (ht : traces[c.series]? = some t) (hx : t.xs[c.point]? = some x) (hy : t.ys[c.point]? = some y) :
-    single showX traces c =
-      some (if showX then s!"{t.name}: {showFloat x}, {showFloat y}" else s!"{t.name}: {showFloat y}") := by
+    single fmt showX traces c =
+      some (if showX then s!"{t.name}: {showNumber fmt x}, {showNumber fmt y}" else s!"{t.name}: {showNumber fmt y}") := by
   simp [single, ht, hx, hy]
 
 /-- What a shared tooltip at the cursor's x reads: the x unless left out, then a line for each visible series with its value there. None when no series is visible. -/
-def sharedText (showX : Bool) (traces : Array Trace) (x : Float) : Option String :=
+def sharedText (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Trace) (x : Float) : Option String :=
   let rows := (Legend.rows traces (some x)).filter (!·.hidden)
   if rows.isEmpty then none
-  else some ("\n".intercalate ((if showX then [s!"x: {showFloat x}"] else []) ++ (rows.map Legend.text).toList))
+  else some ("\n".intercalate ((if showX then [s!"x: {showNumber fmt x}"] else []) ++ (rows.map (Legend.text fmt)).toList))
 
-theorem sharedText_eq (showX : Bool) (traces : Array Trace) (x : Float)
+theorem sharedText_eq (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Trace) (x : Float)
     (h : ((Legend.rows traces (some x)).filter (!·.hidden)).isEmpty = false) :
-    sharedText showX traces x =
-      some ("\n".intercalate ((if showX then [s!"x: {showFloat x}"] else []) ++
-        (((Legend.rows traces (some x)).filter (!·.hidden)).map Legend.text).toList)) := by
+    sharedText fmt showX traces x =
+      some ("\n".intercalate ((if showX then [s!"x: {showNumber fmt x}"] else []) ++
+        (((Legend.rows traces (some x)).filter (!·.hidden)).map (Legend.text fmt)).toList)) := by
   simp [sharedText, h]
 
-theorem sharedText_none_of_hidden (showX : Bool) (traces : Array Trace) (x : Float)
-    (h : ∀ t ∈ traces, t.hidden = true) : sharedText showX traces x = none := by
+theorem sharedText_none_of_hidden (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Trace) (x : Float)
+    (h : ∀ t ∈ traces, t.hidden = true) : sharedText fmt showX traces x = none := by
   have : ((Legend.rows traces (some x)).filter (!·.hidden)).isEmpty = true := by
     simp only [Array.isEmpty_iff_size_eq_zero, Array.size_eq_zero_iff, Array.filter_eq_empty_iff, Legend.rows,
       Array.mem_map]

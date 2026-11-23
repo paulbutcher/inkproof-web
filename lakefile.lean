@@ -12,10 +12,10 @@ package «inkproof-web» where
     ⟨`warningAsError, true⟩
   ]
 
-require «inkproof-gpu» from git "https://github.com/paulbutcher/inkproof-gpu" @ "v0.13.0"
+require «inkproof-gpu» from git "https://github.com/paulbutcher/inkproof-gpu" @ "v0.20.0"
 require «inkproof-viewport» from git "https://github.com/paulbutcher/inkproof-viewport" @ "v0.10.0"
-require «inkproof-axis» from git "https://github.com/paulbutcher/inkproof-axis" @ "v0.7.0"
-require «inkproof-scene» from git "https://github.com/paulbutcher/inkproof-scene" @ "v0.19.0"
+require «inkproof-axis» from git "https://github.com/paulbutcher/inkproof-axis" @ "v0.13.0"
+require «inkproof-scene» from git "https://github.com/paulbutcher/inkproof-scene" @ "v0.28.0"
 require «inkproof-core» from git "https://github.com/paulbutcher/inkproof-core" @ "v0.13.0"
 
 @[default_target]

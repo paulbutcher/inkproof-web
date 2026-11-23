@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.23.0]
+
+- The `number-format` attribute is a list of words (`en`, `de`, `fr`, `compact`, and decimals such as `2dp`) that sets how the legend, its readout and the tooltip write numbers; `Legend.text`, `Legend.readout`, `Legend.tooltip`, `Tooltip.single` and `Tooltip.sharedText` take the format, and `showNumber` writes one number.
+- Axis labels are set in the font and colour of their `TextStyle` (10px sans-serif unless the scene says otherwise), and the legend's look comes from `--inkproof-legend-color`, `--inkproof-legend-font-family` and `--inkproof-legend-font-size`.
+- Requires Scene 0.28.0, Axis 0.13.0 and Gpu 0.20.0.
+
 ## [0.22.0]
 
 - The `cursor` attribute is a list of words: lines (`x`, `y`, `xy`), `dotted`, markers on each series (`markers`, `nearest-marker`), their fill (`filled`, `outline`) and size (`6px`); `CursorStyle.parse` replaces `CursorMode.parse`, `MarkerMode.parse` and `MarkerStyle.parse`.

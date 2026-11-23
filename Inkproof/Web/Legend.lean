@@ -209,8 +209,8 @@ theorem groupRows_last (g : ValueGroup) : ∀ r ∈ groupRows g none, r.last = t
   rfl
 
 /-- What a row reads as: its name, then its text, else its value, else a dash, marked when it is the last value. -/
-def text (r : LegendRow) : String :=
-  s!"{r.name}: {r.word.getD ((r.value.map showFloat).getD "-")}{if r.last then " (last)" else ""}"
+def text (fmt : Option Inkproof.Axis.NumberFormat) (r : LegendRow) : String :=
+  s!"{r.name}: {r.word.getD ((r.value.map (showNumber fmt)).getD "-")}{if r.last then " (last)" else ""}"
 
 theorem rows_size (traces : Array Trace) (x : Option Float) : (rows traces x).size = traces.size := by
   simp [rows]
@@ -224,8 +224,8 @@ theorem rows_getElem? (traces : Array Trace) (x : Option Float) (i : Nat) :
 theorem rows_last (traces : Array Trace) : ∀ r ∈ rows traces none, r.last = true := by
   simp [rows]
 
-theorem text_eq (r : LegendRow) :
-    text r = s!"{r.name}: {r.word.getD ((r.value.map showFloat).getD "-")}{if r.last then " (last)" else ""}" := rfl
+theorem text_eq (fmt : Option Inkproof.Axis.NumberFormat) (r : LegendRow) :
+    text fmt r = s!"{r.name}: {r.word.getD ((r.value.map (showNumber fmt)).getD "-")}{if r.last then " (last)" else ""}" := rfl
 
 /-- Where the legend sits: over the plot at one of its corners, or below the plot, in room of its own, aligned left, centred or right. -/
 inductive Placement where
@@ -450,21 +450,21 @@ theorem parse_bottom : parse (some "bottom") = .ok true := by
   rfl
 
 /-- What the cursor readout says: the x position if `showX`, and the y position if `showY` and the pointer is over the chart; none when it says nothing. -/
-def readout (showX showY : Bool) (x : Float) (y : Option Float) : Option String :=
+def readout (fmt : Option Inkproof.Axis.NumberFormat) (showX showY : Bool) (x : Float) (y : Option Float) : Option String :=
   match showX, showY, y with
-  | true, true, some y => some s!"x: {showFloat x}, y: {showFloat y}"
-  | true, _, _ => some s!"x: {showFloat x}"
-  | false, true, some y => some s!"y: {showFloat y}"
+  | true, true, some y => some s!"x: {showNumber fmt x}, y: {showNumber fmt y}"
+  | true, _, _ => some s!"x: {showNumber fmt x}"
+  | false, true, some y => some s!"y: {showNumber fmt y}"
   | false, _, _ => none
 
-theorem readout_eq (showX showY : Bool) (x : Float) (y : Option Float) :
-    readout showX showY x y = match showX, showY, y with
-      | true, true, some y => some s!"x: {showFloat x}, y: {showFloat y}"
-      | true, _, _ => some s!"x: {showFloat x}"
-      | false, true, some y => some s!"y: {showFloat y}"
+theorem readout_eq (fmt : Option Inkproof.Axis.NumberFormat) (showX showY : Bool) (x : Float) (y : Option Float) :
+    readout fmt showX showY x y = match showX, showY, y with
+      | true, true, some y => some s!"x: {showNumber fmt x}, y: {showNumber fmt y}"
+      | true, _, _ => some s!"x: {showNumber fmt x}"
+      | false, true, some y => some s!"y: {showNumber fmt y}"
       | false, _, _ => none := rfl
 
-theorem readout_none (x : Float) (y : Option Float) : readout false false x y = none := by
+theorem readout_none (fmt : Option Inkproof.Axis.NumberFormat) (x : Float) (y : Option Float) : readout fmt false false x y = none := by
   simp [readout]
 
 /-- Whether the raw `legend` attribute asks for the values: false for `static`, and for no legend. -/
@@ -490,15 +490,15 @@ theorem live_on : live (some "on") = true := by
   rfl
 
 /-- What a tooltip at `c` reads: the series and the point's position, from the traces `c` was found in. -/
-def tooltip (traces : Array Trace) (c : Candidate) : Option String := do
+def tooltip (fmt : Option Inkproof.Axis.NumberFormat) (traces : Array Trace) (c : Candidate) : Option String := do
   let t ← traces[c.series]?
   let x ← t.xs[c.point]?
   let y ← t.ys[c.point]?
-  some s!"{t.name}: {showFloat x}, {showFloat y}"
+  some s!"{t.name}: {showNumber fmt x}, {showNumber fmt y}"
 
-theorem tooltip_eq (traces : Array Trace) (c : Candidate) (t : Trace) (x y : Float)
+theorem tooltip_eq (fmt : Option Inkproof.Axis.NumberFormat) (traces : Array Trace) (c : Candidate) (t : Trace) (x y : Float)
     (ht : traces[c.series]? = some t) (hx : t.xs[c.point]? = some x) (hy : t.ys[c.point]? = some y) :
-    tooltip traces c = some s!"{t.name}: {showFloat x}, {showFloat y}" := by
+    tooltip fmt traces c = some s!"{t.name}: {showNumber fmt x}, {showNumber fmt y}" := by
   simp [tooltip, ht, hx, hy]
 
 /-- The traces with series `i` hidden if it was shown and shown if it was hidden. -/

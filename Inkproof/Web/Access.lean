@@ -2,6 +2,7 @@
 Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+import Inkproof.Axis.NumberFormat
 import Inkproof.Float.RatLemmas
 import Inkproof.Viewport.View
 import Inkproof.Web.Probe
@@ -145,6 +146,13 @@ def showFloat (f : Float) : String :=
 theorem showFloat_eq (f : Float) :
     showFloat f = if (toString f).contains '.' then
       (((toString f).dropEndWhile (· == '0')).dropEndWhile (· == '.')).toString else toString f := rfl
+
+/-- `x` as the format writes it; with no format, or for a value it cannot write such as NaN or an infinity, as `showFloat` does. -/
+def showNumber (fmt : Option Inkproof.Axis.NumberFormat) (x : Float) : String :=
+  (fmt.bind (·.format x)).getD (showFloat x)
+
+theorem showNumber_eq (fmt : Option Inkproof.Axis.NumberFormat) (x : Float) :
+    showNumber fmt x = (fmt.bind (·.format x)).getD (showFloat x) := rfl
 
 /-- A summary from the chart's name, series and visible x range. -/
 def describe (name : String) (series : Array String) (xStart xEnd : Float) : String :=

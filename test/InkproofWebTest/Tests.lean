@@ -77,10 +77,10 @@ def legendWordsCase : TestCase :=
     let g : ValueGroup := {
       name := "g", color := "#000", labels := #["a", "b"], xs := #[0, 10]
       words := #[#[some "on", none], #[some "idle", some "off"]] }
-    let at8 := (Legend.groupRows g (some 8)).map Legend.text
-    let last := (Legend.groupRows g none).map Legend.text
+    let at8 := (Legend.groupRows g (some 8)).map (Legend.text none)
+    let last := (Legend.groupRows g none).map (Legend.text none)
     check (at8 == #["a: idle", "b: off"] && last == #["a: idle (last)", "b: off (last)"] &&
-        (Legend.groupRows g (some 1)).map Legend.text == #["a: on", "b: -"])
+        (Legend.groupRows g (some 1)).map (Legend.text none) == #["a: on", "b: -"])
       s!"{at8} {last}"
 
 /-- Two series over a 400 by 200 pixel plot of 0 to 100 by 0 to 100: the first has a value at x of 25, the second a gap. -/
@@ -143,6 +143,18 @@ def cursorErrorCase : TestCase :=
     check (bad "x xy" && bad "markers nearest-marker" && bad "filled outline" && bad "6px 8px" && bad "0px" && bad "hollow")
       "a bad cursor was accepted"
 
+def numberFormatCase : TestCase :=
+  .mk "number-format words change how legend and readout numbers are written" do
+    let fmt (v : String) := match Numbers.parse (some v) with | .ok f => f | .error _ => none
+    let bad (v : String) := match Numbers.parse (some v) with | .error _ => true | .ok _ => false
+    let big := showNumber (fmt "compact 1dp") 1234567
+    let de := showNumber (fmt "de 2dp") 1234.5
+    let row : LegendRow := { name := "n", color := "#000", hidden := false, value := some 1500, last := false }
+    check (big == "1.2M" && de == "1.234,50" && Legend.text (fmt "compact") row == "n: 1.5k" &&
+        showNumber none (0.0 / 0.0) == showFloat (0.0 / 0.0) &&
+        bad "de fr" && bad "2dp 3dp" && bad "compact compact" && bad "pretty")
+      s!"{big} {de} {Legend.text (fmt "compact") row}"
+
 /-- Wherever the anchor and however far the offset, a tooltip that fits in the chart lies inside it. -/
 def tooltipPlaceCase : TestCase :=
   .mk "a tooltip that fits in the chart is placed inside it" <|
@@ -166,6 +178,6 @@ def tooltipParseCase : TestCase :=
     check (bad "shared xy" && bad "x xy" && bad "top-left top-right" && bad "12 13" && bad "wide" && offset) "tooltip words"
 
 def tests : List TestCase :=
-  [markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase]
+  [markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase, numberFormatCase]
 
 end InkproofWebTest

@@ -20,6 +20,7 @@ import Inkproof.Web.Markers
 import Inkproof.Web.CursorStyle
 import Inkproof.Web.Interaction
 import Inkproof.Web.Tooltip
+import Inkproof.Web.Numbers
 import Inkproof.Web.Group
 import Inkproof.Web.Input
 import Inkproof.Web.Select
@@ -135,6 +136,7 @@ private structure Chart where
   markerMode : IO.Ref MarkerMode
   markerStyle : IO.Ref MarkerStyle
   tooltipStyle : IO.Ref (Option Tooltip.Style)
+  numberFormat : IO.Ref (Option Inkproof.Axis.NumberFormat)
   /-- The legend's style, none when it shows no legend. -/
   legendStyle : IO.Ref (Option Legend.Style)
   /-- Which series the legend has hidden, by index. -/
@@ -355,7 +357,7 @@ private partial def watchRatio (c : Chart) (after : IO Unit) : IO Unit := do
 private def styles : String :=
   ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host([data-touch-action=none]){touch-action:none}:host([data-touch-action=pan-y]){touch-action:pan-y}:host([data-touch-action=pan-xy]){touch-action:pan-x pan-y}" ++
   ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:pre;box-sizing:border-box;padding:var(--inkproof-tooltip-padding,2px 6px);color:var(--inkproof-tooltip-color,inherit);background:var(--inkproof-tooltip-background,#fff);border:var(--inkproof-tooltip-border-width,1px) solid var(--inkproof-tooltip-border-color,#888);border-radius:var(--inkproof-tooltip-border-radius,0);box-shadow:var(--inkproof-tooltip-shadow,none);font:var(--inkproof-tooltip-font-size,12px) var(--inkproof-tooltip-font-family,sans-serif)}" ++
-  ".legend{position:absolute;top:0;right:0;display:flex;font:12px sans-serif}.legend button,.legend .entry{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit}.legend button{cursor:pointer}" ++
+  ".legend{position:absolute;top:0;right:0;display:flex;color:var(--inkproof-legend-color,inherit);font:var(--inkproof-legend-font-size,12px) var(--inkproof-legend-font-family,sans-serif)}.legend button,.legend .entry{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit}.legend button{cursor:pointer;color:var(--inkproof-legend-color,buttontext)}" ++
   ".legend[data-layout=vertical]{flex-direction:column}.legend[data-layout=horizontal]{flex-direction:row;flex-wrap:wrap;align-items:center;gap:0 12px;max-width:100%}" ++
   ".legend[data-place=top-left]{top:0;right:auto;left:0}.legend[data-place=bottom-left]{top:auto;right:auto;bottom:0;left:0}.legend[data-place=bottom-right]{top:auto;bottom:0;right:0}" ++
   ":host([data-legend-below]){display:flex;flex-direction:column}:host([data-legend-below]) canvas{flex:1 1 0;min-height:0;height:auto}" ++
@@ -404,7 +406,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, numberFormat := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -512,6 +514,7 @@ private def showTooltip (c : Chart) (scene : Scene) : IO Unit := do
     c.tip.get "style" Value >>= (·.set "display" "none")
     c.tip.set "textContent" ""
   let (some tip, some (x, y), some config) := (← c.tooltipStyle.get, ← c.cursor.get, scene.access.view) | off
+  let fmt ← c.numberFormat.get
   let view := ((← c.nav.get).map (·.view)).getD (View.home config)
   let traces ← activeTraces c scene
   let py := (y.map fun y => config.y.length - view.y.toScreen config.y y).getD 0
@@ -519,7 +522,7 @@ private def showTooltip (c : Chart) (scene : Scene) : IO Unit := do
   let screen := traces.map (·.onScreen config view)
   match Nearest.find tip.metric screen px py, (tip.metric == .plane && y.isNone) with
   | some hit, false =>
-    let text := if tip.shared then Tooltip.sharedText tip.showX traces x else Tooltip.single tip.showX traces hit
+    let text := if tip.shared then Tooltip.sharedText fmt tip.showX traces x else Tooltip.single fmt tip.showX traces hit
     match text with
     | some text =>
       let style ← c.tip.get "style" Value
@@ -565,8 +568,9 @@ private def showLegend (c : Chart) (scene : Scene) : IO Unit := do
   let live := style.live
   let cursor ← if live || style.showX || style.showY then c.cursor.get else pure none
   let cursorX := cursor.map (·.1)
+  let fmt ← c.numberFormat.get
   if let some (x, y) := cursor then
-    if let some text := Legend.readout style.showX style.showY x y then
+    if let some text := Legend.readout fmt style.showX style.showY x y then
       let readout ← newElement doc "div"
       readout.set "className" "readout"
       readout.set "textContent" text
@@ -580,7 +584,7 @@ private def showLegend (c : Chart) (scene : Scene) : IO Unit := do
     swatch.set "className" "swatch"
     (← swatch.get "style" Value).set "background" row.color
     let label ← newElement doc "span"
-    label.set "textContent" (if live then Legend.text row else row.name)
+    label.set "textContent" (if live then Legend.text fmt row else row.name)
     button.callMethod "append" #[toJS swatch, toJS label] Unit
     c.legendEl.callMethod "append" #[toJS button] Unit
   for (g, gi) in (← activeGroups c scene).zipIdx do
@@ -594,7 +598,7 @@ private def showLegend (c : Chart) (scene : Scene) : IO Unit := do
       swatch.set "className" "swatch"
       (← swatch.get "style" Value).set "background" row.color
       let label ← newElement doc "span"
-      label.set "textContent" (if live then Legend.text row else row.name)
+      label.set "textContent" (if live then Legend.text fmt row else row.name)
       entry.callMethod "append" #[toJS swatch, toJS label] Unit
       c.legendEl.callMethod "append" #[toJS entry] Unit
 
@@ -805,12 +809,15 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   let interactionName ← getAttr c.el "interaction"
   let tooltipName ← getAttr c.el "tooltip"
   let legendName ← getAttr c.el "legend"
+  let numbersName ← getAttr c.el "number-format"
   match ChartAttrs.parse src level, Group.parse groupName, CursorStyle.parse cursorName, Interaction.parse interactionName,
-      Tooltip.parse tooltipName, Legend.parseStyle legendName with
-  | .error message, _, _, _, _, _ | _, .error message, _, _, _, _ | _, _, .error message, _, _, _ | _, _, _, .error message, _, _
-  | _, _, _, _, .error message, _ | _, _, _, _, _, .error message => fail c message []
-  | .ok attrs, .ok group, .ok cursor, .ok interaction, .ok tooltip, .ok legend =>
+      Tooltip.parse tooltipName, Legend.parseStyle legendName, Numbers.parse numbersName with
+  | .error message, _, _, _, _, _, _ | _, .error message, _, _, _, _, _ | _, _, .error message, _, _, _, _
+  | _, _, _, .error message, _, _, _ | _, _, _, _, .error message, _, _ | _, _, _, _, _, .error message, _
+  | _, _, _, _, _, _, .error message => fail c message []
+  | .ok attrs, .ok group, .ok cursor, .ok interaction, .ok tooltip, .ok legend, .ok numbers =>
     c.tooltipStyle.set tooltip
+    c.numberFormat.set numbers
     setLegendStyle c legend
     applyCursorStyle c cursor
     applyInteraction c interaction
@@ -999,12 +1006,13 @@ private def recursor (c : Chart) (value : Option String) : IO Unit := do
     applyCursorStyle c style
     invalidate c
 
-/-- A change of `tooltip` or `legend` redraws them without reloading the chart. -/
-private def reprobe (c : Chart) (tooltip legend : Option String) : IO Unit := do
-  match Tooltip.parse tooltip, Legend.parseStyle legend with
-  | .error message, _ | _, .error message => fail c message []
-  | .ok t, .ok l =>
+/-- A change of `tooltip`, `legend` or `number-format` redraws them without reloading the chart. -/
+private def reprobe (c : Chart) (tooltip legend numbers : Option String) : IO Unit := do
+  match Tooltip.parse tooltip, Legend.parseStyle legend, Numbers.parse numbers with
+  | .error message, _, _ | _, .error message, _ | _, _, .error message => fail c message []
+  | .ok t, .ok l, .ok n =>
     c.tooltipStyle.set t
+    c.numberFormat.set n
     setLegendStyle c l
     refreshProbe c
 
@@ -1028,14 +1036,15 @@ private def changed (loader : Loader) (args : Array Data) : Async Unit := do
       | some (.string "group") => regroup c (← getAttr c.el "group")
       | some (.string "cursor") => recursor c (← getAttr c.el "cursor")
       | some (.string "interaction") => reinput c (← getAttr c.el "interaction")
-      | some (.string "tooltip") | some (.string "legend") => reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend")
+      | some (.string "tooltip") | some (.string "legend") | some (.string "number-format") =>
+        reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend") (← getAttr c.el "number-format")
       | _ => load c loader
 
 private def define (tag : String) (loader : Loader) (resizes buttons : Bool) : IO Unit := do
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend"]
+  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend", "number-format"]
     (← Function.ofFn (connect loader resizes · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))

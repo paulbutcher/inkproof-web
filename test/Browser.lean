@@ -27,7 +27,7 @@ def turnedScene (src : String) : Async Scene := do
   let text := "turned label"
   return { scene with labels := #[
     { text, x := 100, y := 100, align := .center, baseline := .middle },
-    Label.ofPlaced .bottom ⟨text, ⟨300, 100⟩, .vertical⟩] }
+    Label.ofPlaced .bottom { text, anchor := ⟨300, 100⟩, rotation := .vertical }] }
 
 /-- A scene with two series of five points, a view over 0 to 100 (400 pixels across and 200 high), and data for the table. -/
 def accessibleScene (src : String) : Async Scene := do
