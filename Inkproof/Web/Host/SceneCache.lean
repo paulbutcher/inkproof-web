@@ -24,12 +24,18 @@ def SceneCache.new : IO SceneCache := do
   let n ← nextCache.modifyGet fun n => (n, n + 1)
   return { base := n * bufferRange, state := ← IO.mkRef none }
 
-/-- Build a frame with `f`, which is given the cache of buffers already on the GPU and whether nothing has yet been drawn from it (a first frame, or the first after a lost context), and returns the cache it leaves and the frame. -/
-def SceneCache.build {α : Type} (c : SceneCache) (f : Cache → Bool → IO (Cache × α)) : IO α := do
+/-- Build a frame with `f`, which is given what is already on the GPU, the buffers and the recorded draws of the layers drawn from them, and whether nothing has yet been drawn from it (a first frame, or the first after a lost context, when both are empty), and returns what it leaves and the frame. -/
+def SceneCache.buildRetained {α : Type} (c : SceneCache) (f : Retained → Bool → IO (Retained × α)) : IO α := do
   let s := SceneState.current c.base (← contextGeneration) (← c.state.get)
-  let (cache, result) ← f s.cache (!s.drawn)
-  c.state.set (some (s.drew cache))
+  let (retained, result) ← f s.retained (!s.drawn)
+  c.state.set (some (s.drew retained))
   return result
+
+/-- Build a frame with `f`, which is given the cache of buffers already on the GPU and whether nothing has yet been drawn from it (a first frame, or the first after a lost context), and returns the cache it leaves and the frame. -/
+def SceneCache.build {α : Type} (c : SceneCache) (f : Cache → Bool → IO (Cache × α)) : IO α :=
+  c.buildRetained fun r fresh => do
+    let (cache, result) ← f r.cache fresh
+    return ({ r with cache }, result)
 
 /-- Forget the buffers, as when the chart's data changed: the next frame builds from an empty cache. -/
 def SceneCache.invalidate (c : SceneCache) : IO Unit := c.state.set none

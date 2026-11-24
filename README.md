@@ -16,7 +16,7 @@ Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser
 
 - Draw an Inkproof chart in a web page as a custom element, run on one WebGL2 context shared by every chart, recovered after a lost context: `Inkproof.Web.Host.register`.
 - Keep buffers and programs on the GPU between draws so a list can draw what an earlier one uploaded, and learn when a lost context discarded them: `Host.contextGeneration`, the `inkproof-contextrestored` event.
-- Keep a chart's buffers on the GPU across frames without page bookkeeping: `Host.SceneCache.new` numbers the chart's buffers apart from other charts', `SceneCache.build` hands your frame builder the cache and whether it is the first since a lost context (which it empties itself), and `SceneCache.invalidate` forgets it when the data changes; the pure state is `SceneState`.
+- Keep a chart's buffers on the GPU across frames without page bookkeeping: `Host.SceneCache.new` numbers the chart's buffers apart from other charts', `SceneCache.build` hands your frame builder the cache, and `SceneCache.buildRetained` the cache with the recorded draws of retained layers, and whether it is the first since a lost context (which it empties itself), and `SceneCache.invalidate` forgets it when the data changes; the pure state is `SceneState`.
 - Redraw only when something changed, never while idle: `Frame`, `Frame.invalidate`, `Frame.shouldDraw`.
 - Size the drawing surface to the device pixel ratio: `Size`, `backingPx`.
 - Draw text over a chart, anchored and aligned on a point and turned about it, as axis labels need: `Host.Label` with `align`, `baseline` and `rotation`.
