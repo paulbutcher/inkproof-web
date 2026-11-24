@@ -124,6 +124,7 @@ private structure Chart where
   table : Value
   tip : Value
   legendEl : Value
+  titleEl : Value
   nav : IO.Ref (Option Nav)
   listeners : IO.Ref (Array (String × Value))
   pointers : IO.Ref (Array (Nat × Px))
@@ -366,7 +367,8 @@ private def styles : String :=
   ".legend{position:absolute;top:0;right:0;display:flex;color:var(--inkproof-legend-color,inherit);font:var(--inkproof-legend-font-size,12px) var(--inkproof-legend-font-family,sans-serif)}.legend button,.legend .entry{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit}.legend button{cursor:pointer;color:var(--inkproof-legend-color,buttontext)}" ++
   ".legend[data-layout=vertical]{flex-direction:column}.legend[data-layout=horizontal]{flex-direction:row;flex-wrap:wrap;align-items:center;gap:0 12px;max-width:100%}" ++
   ".legend[data-place=top-left]{top:0;right:auto;left:0}.legend[data-place=bottom-left]{top:auto;right:auto;bottom:0;left:0}.legend[data-place=bottom-right]{top:auto;bottom:0;right:0}" ++
-  ":host([data-legend-below]){display:flex;flex-direction:column}:host([data-legend-below]) canvas{flex:1 1 0;min-height:0;height:auto}" ++
+  ":host([data-legend-below]),:host([data-title]){display:flex;flex-direction:column}:host([data-legend-below]) canvas,:host([data-title]) canvas{flex:1 1 0;min-height:0;height:auto}" ++
+  ".title{display:none;flex:none;text-align:center;color:var(--inkproof-title-color,inherit);font:var(--inkproof-title-font-size,16px) var(--inkproof-title-font-family,sans-serif);padding:var(--inkproof-title-padding,4px 0)}:host([data-title]) .title{display:block}" ++
   ".legend[data-place^=below]{position:static;flex:none;min-height:20px}" ++
   ".legend[data-layout=horizontal][data-place=below-left]{justify-content:flex-start}.legend[data-layout=horizontal][data-place=below-center]{justify-content:center}.legend[data-layout=horizontal][data-place=below-right]{justify-content:flex-end}" ++
   ".legend[data-layout=vertical][data-place=below-left]{align-items:flex-start}.legend[data-layout=vertical][data-place=below-center]{align-items:center}.legend[data-layout=vertical][data-place=below-right]{align-items:flex-end}" ++
@@ -395,7 +397,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
       wrapper.callMethod "append" #[toJS table] Unit
       root.callMethod "append" #[toJS announcer, toJS wrapper] Unit
       pure root
-  for old in ["tip", "legend"] do
+  for old in ["tip", "legend", "title"] do
     if let some e ← Web.Support.optionalValue (← root.callMethod "querySelector" #[toJS s!".{old}"] Data) then
       e.callMethod "remove" #[] Unit
   let tip ← newElement doc "div"
@@ -405,11 +407,15 @@ private def build (id : Nat) (el : Value) : IO Chart := do
   legendEl.set "className" "legend"
   root.callMethod "append" #[toJS tip, toJS legendEl] Unit
   let canvas ← root.callMethod "querySelector" #[toJS "canvas"]
-  let announcer ← root.callMethod "querySelector" #[toJS "div"]
+  let titleEl ← newElement doc "div"
+  titleEl.set "className" "title"
+  titleEl.callMethod "setAttribute" #[toJS "part", toJS "title"] Unit
+  canvas.callMethod "before" #[toJS titleEl] Unit
+  let announcer ← root.callMethod "querySelector" #[toJS "[aria-live]"]
   let table ← root.callMethod "querySelector" #[toJS "table"]
   let ctx ← canvas.callMethod "getContext" #[toJS "2d"]
   return {
-    id, el, canvas, ctx, announcer, table, tip, legendEl
+    id, el, canvas, ctx, announcer, table, tip, legendEl, titleEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
     dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, numberFormat := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
@@ -541,7 +547,8 @@ private def showTooltip (c : Chart) (scene : Scene) : IO Unit := do
         | .pointer, some _ => (px, py)
         | _, _ => (hit.x, hit.y)
       let size ← c.tip.callMethod "getBoundingClientRect" #[] Value
-      let (left, top) := tip.place (ox + ax) (oy + ay) (← size.get "width" Float) (← size.get "height" Float)
+      let canvasTop ← c.canvas.get "offsetTop" Float
+      let (left, top) := tip.place (ox + ax) (canvasTop + oy + ay) (← size.get "width" Float) (← size.get "height" Float)
         (← c.el.get "clientWidth" Float) (← c.el.get "clientHeight" Float)
       style.set "left" s!"{left}px"
       style.set "top" s!"{top}px"
@@ -556,6 +563,16 @@ private def placeName : Legend.Placement → String
   | .belowLeft => "below-left"
   | .belowCenter => "below-center"
   | .belowRight => "below-right"
+
+/-- Show `title` above the plot, or nothing: the canvas, and the size a loader is given, are the element less the title's row. -/
+private def setTitle (c : Chart) (title : Option String) : IO Unit := do
+  match title with
+  | some t =>
+    c.titleEl.set "textContent" t
+    c.el.callMethod "setAttribute" #[toJS "data-title", toJS ""] Unit
+  | none =>
+    c.titleEl.set "textContent" ""
+    c.el.callMethod "removeAttribute" #[toJS "data-title"] Unit
 
 /-- Take up a legend style: the stylesheet places the legend by the attributes this sets on it and on the element. -/
 private def setLegendStyle (c : Chart) (style : Option Legend.Style) : IO Unit := do
@@ -816,6 +833,7 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   let tooltipName ← getAttr c.el "tooltip"
   let legendName ← getAttr c.el "legend"
   let numbersName ← getAttr c.el "number-format"
+  setTitle c (← getAttr c.el "chart-title")
   match ChartAttrs.parse src level, Group.parse groupName, CursorStyle.parse cursorName, Interaction.parse interactionName,
       Tooltip.parse tooltipName, Legend.parseStyle legendName, Numbers.parse numbersName with
   | .error message, _, _, _, _, _, _ | _, .error message, _, _, _, _, _ | _, _, .error message, _, _, _, _
@@ -1042,6 +1060,7 @@ private def changed (loader : Loader) (args : Array Data) : Async Unit := do
       | some (.string "group") => regroup c (← getAttr c.el "group")
       | some (.string "cursor") => recursor c (← getAttr c.el "cursor")
       | some (.string "interaction") => reinput c (← getAttr c.el "interaction")
+      | some (.string "chart-title") => setTitle c (← getAttr c.el "chart-title")
       | some (.string "tooltip") | some (.string "legend") | some (.string "number-format") =>
         reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend") (← getAttr c.el "number-format")
       | _ => load c loader
@@ -1050,7 +1069,7 @@ private def define (tag : String) (loader : Loader) (resizes buttons : Bool) : I
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend", "number-format"]
+  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend", "number-format", "chart-title"]
     (← Function.ofFn (connect loader resizes · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))

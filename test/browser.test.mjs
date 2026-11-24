@@ -979,6 +979,27 @@ test('a sized chart makes its scene again for its new size and keeps its legend 
   await context.close();
 });
 
+test('a title sits above the plot inside the element, and the plot shrinks by its height', async () => {
+  const { page, context } = await open('/titled.html');
+  await drawn(page, 1);
+  const measure = () => page.evaluate(() => {
+    const el = document.querySelector('inkproof-sized-chart');
+    const rect = e => e.getBoundingClientRect();
+    const title = el.shadowRoot.querySelector('.title');
+    return { host: rect(el), canvas: rect(el.shadowRoot.querySelector('canvas')), title: rect(title), text: title.textContent };
+  });
+  const titled = await measure();
+  assert.equal(titled.text, 'Weekly totals');
+  assert.ok(titled.title.height > 0 && titled.title.top >= titled.host.top - 0.5 && titled.title.bottom <= titled.canvas.top + 0.5, 'the title is not above the plot inside the element');
+  assert.ok(Math.abs((titled.title.left + titled.title.right) / 2 - (titled.host.left + titled.host.right) / 2) <= 1, 'the title is not centred');
+  assert.ok(Math.abs(titled.canvas.height - (titled.host.height - titled.title.height)) <= 1, 'the plot did not shrink by the title height');
+  await page.evaluate(() => document.querySelector('inkproof-sized-chart').removeAttribute('chart-title'));
+  const bare = await measure();
+  assert.ok(Math.abs(bare.canvas.height - bare.host.height) <= 1, 'removing the title did not give the plot its height back');
+  assert.equal(bare.title.height, 0);
+  await context.close();
+});
+
 test('a clipped draw covers the whole plot at any device pixel ratio', async () => {
   for (const factor of [1, 2, 3]) {
     const { page, context } = await open('/pixels.html', { deviceScaleFactor: factor });

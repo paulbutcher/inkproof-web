@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.25.2]
+
+- The `chart-title` attribute draws a centred title above the plot, which shrinks by its height.
 ## [0.25.1]
 
 - `Host.Label` has an optional `second` line, painted under the first, and `Label.ofPlaced` fills it from the context of a time-axis label.
