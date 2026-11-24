@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.25.1]
+
+- `Host.Label` has an optional `second` line, painted under the first, and `Label.ofPlaced` fills it from the context of a time-axis label.
+- Requires Scene 0.30.0 and Axis 0.14.0.
+
 ## [0.25.0]
 
 - `SceneCache.buildRetained` gives the frame builder Gpu's `Retained` and whether nothing has yet been drawn, and keeps the `Retained` it returns across frames; a lost context empties it.

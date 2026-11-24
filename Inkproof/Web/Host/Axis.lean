@@ -26,7 +26,7 @@ theorem textFont_eq (s : TextStyle) : textFont s = s!"{showFloat (ratToFloat s.s
 /-- The Canvas 2D label for `l` on the `side` axis of a plot, set in the font and colour of its style. A horizontal label is centred on the anchor, below a bottom axis and above a top one; a turned label ends at the anchor on a bottom axis and starts there on a top one, vertically centred, turned a quarter or an eighth of a turn anticlockwise; a label on a left axis ends at the anchor and one on a right axis starts there, vertically centred and unturned. -/
 def Label.ofPlaced (side : Side) (l : PlacedLabel) : Label :=
   let base : Label :=
-    { text := l.text, x := ratToFloat l.anchor.x, y := ratToFloat l.anchor.y, font := textFont l.style, color := colorCss l.style.color }
+    { text := l.text, x := ratToFloat l.anchor.x, y := ratToFloat l.anchor.y, font := textFont l.style, color := colorCss l.style.color, second := l.context }
   match side, l.rotation with
   | .bottom, .horizontal => { base with align := .center, baseline := .top }
   | .top, .horizontal => { base with align := .center, baseline := .bottom }
@@ -42,6 +42,9 @@ def Label.ofDrawing (side : Side) (d : AxisDrawing) : Array Label :=
   (d.labels.map (Label.ofPlaced side)).toArray
 
 theorem Label.ofPlaced_text (side : Side) (l : PlacedLabel) : (Label.ofPlaced side l).text = l.text := by
+  unfold Label.ofPlaced; split <;> rfl
+
+theorem Label.ofPlaced_second (side : Side) (l : PlacedLabel) : (Label.ofPlaced side l).second = l.context := by
   unfold Label.ofPlaced; split <;> rfl
 
 theorem Label.ofPlaced_position (side : Side) (l : PlacedLabel) :
