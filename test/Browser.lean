@@ -29,6 +29,14 @@ def turnedScene (src : String) : Async Scene := do
     { text, x := 100, y := 100, align := .center, baseline := .middle },
     Label.ofPlaced .bottom { text, anchor := ⟨300, 100⟩, rotation := .vertical }] }
 
+/-- The same text on the left with a second line under it and on the right alone, both centred on their anchors. -/
+def secondLineScene (src : String) : Async Scene := do
+  let scene ← fetchScene src
+  let text := "first line"
+  return { scene with labels := #[
+    { text, second := some "second line", x := 100, y := 60, align := .center, baseline := .top },
+    { text, x := 300, y := 60, align := .center, baseline := .top }] }
+
 /-- A scene with two series of five points, a view over 0 to 100 (400 pixels across and 200 high), and data for the table. -/
 def accessibleScene (src : String) : Async Scene := do
   let scene ← fetchScene src
@@ -137,6 +145,7 @@ def main : IO Unit := do
   register "inkproof-chart"
   register "inkproof-labelled-chart" labelledScene
   register "inkproof-turned-chart" turnedScene
+  register "inkproof-second-chart" secondLineScene
   registerSized "inkproof-sized-chart" sizedScene
   registerPixels "inkproof-pixel-chart" clippedScene
   let doc ← (← global).get "document"

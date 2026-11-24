@@ -9,6 +9,7 @@ import Std.Data.HashMap
 import Inkproof.Viewport.Gesture
 import Inkproof.Viewport.Linked
 import Inkproof.Web.Surface
+import Inkproof.Web.Host.Measure
 import Inkproof.Web.Frame
 import Inkproof.Web.Attr
 import Inkproof.Web.Access
@@ -81,7 +82,7 @@ theorem Baseline.canvas_injective : Function.Injective Baseline.canvas := by
   intro a b h
   cases a <;> cases b <;> first | rfl | (simp [Baseline.canvas] at h)
 
-/-- A piece of text for the Canvas 2D layer, anchored at `x`, `y` in CSS pixels from the chart's top left. The text is turned about the anchor by `rotation` radians, clockwise on the page. -/
+/-- A piece of text for the Canvas 2D layer, anchored at `x`, `y` in CSS pixels from the chart's top left. The text is turned about the anchor by `rotation` radians, clockwise on the page. `second`, if any, is a second line under the first, with the same anchor, alignment and rotation, one measured line height lower. -/
 structure Label where
   text : String
   x : Float
@@ -91,6 +92,7 @@ structure Label where
   rotation : Float := 0
   font : String := "12px sans-serif"
   color : String := "#000"
+  second : Option String := none
 
 /-- What a chart shows: the encoded Gpu command list for the data layers, and the text over them. -/
 structure Scene where
@@ -259,6 +261,10 @@ private def draw (c : Chart) : IO Unit := do
     c.ctx.callMethod "translate" #[toJS label.x, toJS label.y] Unit
     c.ctx.callMethod "rotate" #[toJS label.rotation] Unit
     c.ctx.callMethod "fillText" #[toJS label.text, toJS 0, toJS 0] Unit
+    if let some second := label.second then
+      let (_, lineHeight) := (← measurer label.font #[second]) second
+      if lineHeight.isFinite then
+        c.ctx.callMethod "fillText" #[toJS second, toJS 0, toJS lineHeight] Unit
     c.ctx.callMethod "restore" #[] Unit
   if let (some band, some config) := (← c.band.get, scene.access.view) then
     let view := ((← c.nav.get).map (·.view)).getD (View.home config)

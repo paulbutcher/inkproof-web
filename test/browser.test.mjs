@@ -277,6 +277,31 @@ test('labels are aligned on their anchor and turned about it', async () => {
   await context.close();
 });
 
+test('a label with a second line draws both lines under the same anchor', async () => {
+  const { page, context } = await open('/second.html');
+  await drawn(page, 1);
+  const boxes = await page.evaluate(() => {
+    const c = document.querySelector('inkproof-second-chart').shadowRoot.querySelector('canvas');
+    const k = c.width / 400;
+    const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    const out = [{ y0: Infinity, y1: -Infinity, x0: Infinity, x1: -Infinity }, { y0: Infinity, y1: -Infinity, x0: Infinity, x1: -Infinity }];
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+      const i = (y * c.width + x) * 4;
+      if (data[i] > 90 || data[i + 1] > 90 || data[i + 2] > 90) continue;
+      const b = out[x < c.width / 2 ? 0 : 1];
+      b.y0 = Math.min(b.y0, y / k); b.y1 = Math.max(b.y1, y / k);
+      b.x0 = Math.min(b.x0, x / k); b.x1 = Math.max(b.x1, x / k);
+    }
+    return out;
+  });
+  const [two, one] = boxes;
+  assert.ok(two.y0 >= 59 && one.y0 >= 59, 'text starts above its anchor');
+  assert.ok(Math.abs(two.y0 - one.y0) < 3, 'the first line moved');
+  assert.ok(two.y1 - two.y0 > 1.7 * (one.y1 - one.y0), `two lines are not taller than one: ${JSON.stringify(boxes)}`);
+  assert.ok(two.x0 < 100 && 100 < two.x1, 'the second line does not share the first one anchor');
+  await context.close();
+});
+
 test('a tile query sums the tiles it touches and leaves the main thread free', async () => {
   const { page, context, messages } = await open('/tiles.html');
   const requests = [];

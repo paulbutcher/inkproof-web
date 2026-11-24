@@ -19,7 +19,7 @@ Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser
 - Keep a chart's buffers on the GPU across frames without page bookkeeping: `Host.SceneCache.new` numbers the chart's buffers apart from other charts', `SceneCache.build` hands your frame builder the cache, and `SceneCache.buildRetained` the cache with the recorded draws of retained layers, and whether it is the first since a lost context (which it empties itself), and `SceneCache.invalidate` forgets it when the data changes; the pure state is `SceneState`.
 - Redraw only when something changed, never while idle: `Frame`, `Frame.invalidate`, `Frame.shouldDraw`.
 - Size the drawing surface to the device pixel ratio: `Size`, `backingPx`.
-- Draw text over a chart, anchored and aligned on a point and turned about it, as axis labels need: `Host.Label` with `align`, `baseline` and `rotation`.
+- Draw text over a chart, anchored and aligned on a point and turned about it, as axis labels need: `Host.Label` with `align`, `baseline` and `rotation`, and an optional `second` line under it.
 - Turn the labels Scene places for an axis into Canvas 2D labels, aligned and turned as each side of the plot needs: `Host.Label.ofPlaced`, `Host.Label.ofDrawing`.
 - Measure text once per font and string: `TextCache`.
 - Read and validate the element's attributes, reporting bad ones instead of defaulting them: `ChartAttrs.parse`.
