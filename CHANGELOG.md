@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.25.0]
+
+- `SceneCache.buildRetained` gives the frame builder Gpu's `Retained` and whether nothing has yet been drawn, and keeps the `Retained` it returns across frames; a lost context empties it.
+- Requires Gpu 0.22.0.
+
 ## [0.24.1]
 
 - The README's `require` example names no version.
