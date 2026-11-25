@@ -3,7 +3,8 @@ def Inkproof.Web.Access.cursorText : Inkproof.Web.Access → Inkproof.Web.Nav �
 theorem Inkproof.Web.Access.cursorText_eq : ∀ (a : Inkproof.Web.Access) (n : Inkproof.Web.Nav), a.cursorText n = ToString.toString (a.series[n.series]?.getD (ToString.toString "series " ++ ToString.toString (n.series + 1))) ++ ToString.toString ", point " ++ ToString.toString (n.point + 1) ++ ToString.toString " of " ++ ToString.toString a.points
 field Inkproof.Web.Access.groups : Inkproof.Web.Access → Array Inkproof.Web.ValueGroup
 field Inkproof.Web.Access.header : Inkproof.Web.Access → Array String
-constructor Inkproof.Web.Access.mk : String → Array String → Nat → Option String → Array String → Array (Array String) → Option (Inkproof.Viewport.ViewConfig Float) → Float × Float → Array Inkproof.Web.Trace → Array Inkproof.Web.ValueGroup → Inkproof.Web.Access
+field Inkproof.Web.Access.items : Inkproof.Web.Access → Array Inkproof.Web.Item
+constructor Inkproof.Web.Access.mk : String → Array String → Nat → Option String → Array String → Array (Array String) → Option (Inkproof.Viewport.ViewConfig Float) → Float × Float → Array Inkproof.Web.Trace → Array Inkproof.Web.ValueGroup → Array Inkproof.Web.Item → Inkproof.Web.Access
 field Inkproof.Web.Access.name : Inkproof.Web.Access → String
 field Inkproof.Web.Access.plotOrigin : Inkproof.Web.Access → Float × Float
 field Inkproof.Web.Access.points : Inkproof.Web.Access → Nat
@@ -131,6 +132,10 @@ theorem Inkproof.Web.Group.parse_none : Inkproof.Web.Group.parse Option.none = E
 def Inkproof.Web.Group.toggled : Option String → Option String → Option String
 theorem Inkproof.Web.Group.toggled_linked : ∀ (name : String) (named : Option String), Inkproof.Web.Group.toggled (Option.some name) named = Option.none
 theorem Inkproof.Web.Group.toggled_unlinked : ∀ (named : Option String), Inkproof.Web.Group.toggled Option.none named = named
+def Inkproof.Web.Highlight.parse : Option String → Except String Bool
+theorem Inkproof.Web.Highlight.parse_none : Inkproof.Web.Highlight.parse Option.none = Except.ok Bool.false
+theorem Inkproof.Web.Highlight.parse_off : Inkproof.Web.Highlight.parse (Option.some "off") = Except.ok Bool.false
+theorem Inkproof.Web.Highlight.parse_on : Inkproof.Web.Highlight.parse (Option.some "on") = Except.ok Bool.true
 structure Inkproof.Web.Interaction : Type
 field Inkproof.Web.Interaction.box : Inkproof.Web.Interaction → Inkproof.Web.BoxConfig
 field Inkproof.Web.Interaction.drag : Inkproof.Web.Interaction → Inkproof.Web.DragMode
@@ -144,6 +149,21 @@ theorem Inkproof.Web.Interaction.parse_wheel : ∃ i, Inkproof.Web.Interaction.p
 field Inkproof.Web.Interaction.select : Inkproof.Web.Interaction → Inkproof.Web.SelectMode
 field Inkproof.Web.Interaction.touch : Inkproof.Web.Interaction → Inkproof.Web.TouchMode
 field Inkproof.Web.Interaction.wheel : Inkproof.Web.Interaction → Inkproof.Web.WheelMode
+structure Inkproof.Web.Item : Type
+def Inkproof.Web.Item.contains : Inkproof.Web.Item → Float → Float → Bool
+theorem Inkproof.Web.Item.contains_eq : ∀ (i : Inkproof.Web.Item) (x y : Float), i.contains x y = (Decidable.decide (Min.min i.x0 i.x1 ≤ x) && Decidable.decide (x ≤ Max.max i.x0 i.x1) && Decidable.decide (Min.min i.y0 i.y1 ≤ y) && Decidable.decide (y ≤ Max.max i.y0 i.y1))
+field Inkproof.Web.Item.description : Inkproof.Web.Item → Option String
+def Inkproof.Web.Item.hit : Array Inkproof.Web.Item → Float → Float → Option Nat
+theorem Inkproof.Web.Item.hit_none : ∀ (items : Array Inkproof.Web.Item) (x y : Float), Inkproof.Web.Item.hit items x y = Option.none → ∀ (it : Inkproof.Web.Item), it ∈ items → it.contains x y = Bool.false
+theorem Inkproof.Web.Item.hit_some : ∀ (items : Array Inkproof.Web.Item) (x y : Float) (i : Nat), Inkproof.Web.Item.hit items x y = Option.some i → ∃ it, items[i]? = Option.some it ∧ it.contains x y = Bool.true ∧ ∀ (j : Nat) (it' : Inkproof.Web.Item), i < j → items[j]? = Option.some it' → it'.contains x y = Bool.false
+constructor Inkproof.Web.Item.mk : Float → Float → Float → Float → Option String → Option Nat → Inkproof.Web.Item
+def Inkproof.Web.Item.screenRect : Float → Float → Float → Float → Float → Float → Float × Float × Float × Float
+theorem Inkproof.Web.Item.screenRect_eq : ∀ (sx0 sy0 sx1 sy1 width height : Float), Inkproof.Web.Item.screenRect sx0 sy0 sx1 sy1 width height = (Max.max 0 (Min.min sx0 sx1), Max.max 0 (Min.min sy0 sy1), Max.max 0 (Min.min width (Max.max sx0 sx1) - Max.max 0 (Min.min sx0 sx1)), Max.max 0 (Min.min height (Max.max sy0 sy1) - Max.max 0 (Min.min sy0 sy1)))
+field Inkproof.Web.Item.series : Inkproof.Web.Item → Option Nat
+field Inkproof.Web.Item.x0 : Inkproof.Web.Item → Float
+field Inkproof.Web.Item.x1 : Inkproof.Web.Item → Float
+field Inkproof.Web.Item.y0 : Inkproof.Web.Item → Float
+field Inkproof.Web.Item.y1 : Inkproof.Web.Item → Float
 inductive Inkproof.Web.Legend.Layout : Type
 constructor Inkproof.Web.Legend.Layout.horizontal : Inkproof.Web.Legend.Layout
 def Inkproof.Web.Legend.Layout.ofNat : Nat → Inkproof.Web.Legend.Layout

@@ -21,6 +21,7 @@ import Inkproof.Web.Markers
 import Inkproof.Web.CursorStyle
 import Inkproof.Web.Interaction
 import Inkproof.Web.Tooltip
+import Inkproof.Web.Highlight
 import Inkproof.Web.Numbers
 import Inkproof.Web.ChartTheme
 import Inkproof.Web.Group
@@ -125,6 +126,7 @@ private structure Chart where
   table : Value
   tip : Value
   legendEl : Value
+  highlightEl : Value
   titleEl : Value
   nav : IO.Ref (Option Nav)
   listeners : IO.Ref (Array (String × Value))
@@ -140,6 +142,8 @@ private structure Chart where
   markerMode : IO.Ref MarkerMode
   markerStyle : IO.Ref MarkerStyle
   tooltipStyle : IO.Ref (Option Tooltip.Style)
+  /-- Whether the item under the cursor is filled and its description shown. -/
+  highlightOn : IO.Ref Bool
   numberFormat : IO.Ref (Option Inkproof.Axis.NumberFormat)
   theme : IO.Ref (Option Theme)
   /-- The legend's style, none when it shows no legend. -/
@@ -386,7 +390,7 @@ private def themeRule (name : String) (t : Theme) : String :=
 private def styles : String :=
   themeRule "light" .light ++ themeRule "dark" .dark ++
   ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host([data-touch-action=none]){touch-action:none}:host([data-touch-action=pan-y]){touch-action:pan-y}:host([data-touch-action=pan-xy]){touch-action:pan-x pan-y}" ++
-  ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:pre;box-sizing:border-box;padding:var(--inkproof-tooltip-padding,2px 6px);color:var(--inkproof-tooltip-color,var(--inkproof-theme-tooltip-color,inherit));background:var(--inkproof-tooltip-background,var(--inkproof-theme-tooltip-background,#fff));border:var(--inkproof-tooltip-border-width,1px) solid var(--inkproof-tooltip-border-color,var(--inkproof-theme-border,#888));border-radius:var(--inkproof-tooltip-border-radius,0);box-shadow:var(--inkproof-tooltip-shadow,none);font:var(--inkproof-tooltip-font-size,12px) var(--inkproof-tooltip-font-family,sans-serif)}" ++
+  ":host{position:relative}.highlight{position:absolute;display:none;pointer-events:none;box-sizing:border-box;background:var(--inkproof-highlight-background,var(--inkproof-theme-legend-color,#888));opacity:var(--inkproof-highlight-opacity,0.25);border:var(--inkproof-highlight-border-width,0) solid var(--inkproof-highlight-border-color,currentColor)}.tip{position:absolute;display:none;pointer-events:none;white-space:pre;box-sizing:border-box;padding:var(--inkproof-tooltip-padding,2px 6px);color:var(--inkproof-tooltip-color,var(--inkproof-theme-tooltip-color,inherit));background:var(--inkproof-tooltip-background,var(--inkproof-theme-tooltip-background,#fff));border:var(--inkproof-tooltip-border-width,1px) solid var(--inkproof-tooltip-border-color,var(--inkproof-theme-border,#888));border-radius:var(--inkproof-tooltip-border-radius,0);box-shadow:var(--inkproof-tooltip-shadow,none);font:var(--inkproof-tooltip-font-size,12px) var(--inkproof-tooltip-font-family,sans-serif)}" ++
   ".legend{position:absolute;top:0;right:0;display:flex;color:var(--inkproof-legend-color,var(--inkproof-theme-legend-color,inherit));font:var(--inkproof-legend-font-size,12px) var(--inkproof-legend-font-family,sans-serif)}.legend button,.legend .entry{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit}.legend button{cursor:pointer;color:var(--inkproof-legend-color,var(--inkproof-theme-legend-color,buttontext))}" ++
   ".legend[data-layout=vertical]{flex-direction:column}.legend[data-layout=horizontal]{flex-direction:row;flex-wrap:wrap;align-items:center;gap:0 12px;max-width:100%}" ++
   ".legend[data-place=top-left]{top:0;right:auto;left:0}.legend[data-place=bottom-left]{top:auto;right:auto;bottom:0;left:0}.legend[data-place=bottom-right]{top:auto;bottom:0;right:0}" ++
@@ -420,7 +424,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
       wrapper.callMethod "append" #[toJS table] Unit
       root.callMethod "append" #[toJS announcer, toJS wrapper] Unit
       pure root
-  for old in ["tip", "legend", "title"] do
+  for old in ["tip", "highlight", "legend", "title"] do
     if let some e ← Web.Support.optionalValue (← root.callMethod "querySelector" #[toJS s!".{old}"] Data) then
       e.callMethod "remove" #[] Unit
   let tip ← newElement doc "div"
@@ -428,7 +432,10 @@ private def build (id : Nat) (el : Value) : IO Chart := do
   tip.callMethod "setAttribute" #[toJS "part", toJS "tooltip"] Unit
   let legendEl ← newElement doc "div"
   legendEl.set "className" "legend"
-  root.callMethod "append" #[toJS tip, toJS legendEl] Unit
+  let highlightEl ← newElement doc "div"
+  highlightEl.set "className" "highlight"
+  highlightEl.callMethod "setAttribute" #[toJS "part", toJS "highlight"] Unit
+  root.callMethod "append" #[toJS highlightEl, toJS tip, toJS legendEl] Unit
   let canvas ← root.callMethod "querySelector" #[toJS "canvas"]
   let titleEl ← newElement doc "div"
   titleEl.set "className" "title"
@@ -438,10 +445,10 @@ private def build (id : Nat) (el : Value) : IO Chart := do
   let table ← root.callMethod "querySelector" #[toJS "table"]
   let ctx ← canvas.callMethod "getContext" #[toJS "2d"]
   return {
-    id, el, canvas, ctx, announcer, table, tip, legendEl, titleEl
+    id, el, canvas, ctx, announcer, table, tip, legendEl, highlightEl, titleEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, numberFormat := ← IO.mkRef none, theme := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, highlightOn := ← IO.mkRef false, numberFormat := ← IO.mkRef none, theme := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -544,37 +551,69 @@ private def adoptTraces (c : Chart) (scene : Scene) : IO Unit :=
   c.hidden.modify fun mask =>
     if mask.size == scene.access.traces.size then mask else scene.access.traces.map (·.hidden)
 
+/-- Show `text` in the tooltip box, opening from the anchor `(ax, ay)` in the plot's pixels. -/
+private def openTip (c : Chart) (scene : Scene) (tip : Tooltip.Style) (text : String) (ax ay : Float) : IO Unit := do
+  let style ← c.tip.get "style" Value
+  c.tip.set "textContent" text
+  style.set "left" "0px"
+  style.set "top" "0px"
+  style.set "display" "block"
+  let (ox, oy) := scene.access.plotOrigin
+  let size ← c.tip.callMethod "getBoundingClientRect" #[] Value
+  let canvasTop ← c.canvas.get "offsetTop" Float
+  let (left, top) := tip.place (ox + ax) (canvasTop + oy + ay) (← size.get "width" Float) (← size.get "height" Float)
+    (← c.el.get "clientWidth" Float) (← c.el.get "clientHeight" Float)
+  style.set "left" s!"{left}px"
+  style.set "top" s!"{top}px"
+
+/-- Where a tooltip for an item opens when the `tooltip` attribute says nothing. -/
+private def itemTip : Tooltip.Style :=
+  { metric := .x, shared := false, showX := true, anchor := .pointer, right := true, top := true, offset := 8 }
+
+/-- Fill the item under the cursor and return its description. -/
+private def showHighlight (c : Chart) (scene : Scene) : IO (Option String) := do
+  let el ← c.highlightEl.get "style" Value
+  let off : IO (Option String) := do el.set "display" "none"; return none
+  let (true, some (x, some y), some config) := (← c.highlightOn.get, ← c.cursor.get, scene.access.view) | off
+  let view := ((← c.nav.get).map (·.view)).getD (View.home config)
+  let some i := Item.hit scene.access.items x y | off
+  let some item := scene.access.items[i]? | off
+  let (ox, oy) := scene.access.plotOrigin
+  let sx (v : Float) := view.x.toScreen config.x v
+  let sy (v : Float) := config.y.length - view.y.toScreen config.y v
+  let (l, t, w, h) := Item.screenRect (sx item.x0) (sy item.y0) (sx item.x1) (sy item.y1) config.x.length config.y.length
+  let canvasTop ← c.canvas.get "offsetTop" Float
+  el.set "left" s!"{ox + l}px"
+  el.set "top" s!"{canvasTop + oy + t}px"
+  el.set "width" s!"{w}px"
+  el.set "height" s!"{h}px"
+  el.set "display" "block"
+  return item.description
+
 private def showTooltip (c : Chart) (scene : Scene) : IO Unit := do
   let off : IO Unit := do
     c.tip.get "style" Value >>= (·.set "display" "none")
     c.tip.set "textContent" ""
-  let (some tip, some (x, y), some config) := (← c.tooltipStyle.get, ← c.cursor.get, scene.access.view) | off
+  let described ← showHighlight c scene
+  let (some tip, some (x, y), some config) := ((← c.tooltipStyle.get).orElse fun _ => described.map fun _ => itemTip, ← c.cursor.get, scene.access.view) | off
   let fmt ← c.numberFormat.get
   let view := ((← c.nav.get).map (·.view)).getD (View.home config)
-  let traces ← activeTraces c scene
   let py := (y.map fun y => config.y.length - view.y.toScreen config.y y).getD 0
   let px := view.x.toScreen config.x x
+  if let (some text, some _) := (described, y) then
+    openTip c scene tip text px py
+    return
+  let traces ← activeTraces c scene
   let screen := traces.map (·.onScreen config view)
   match Nearest.find tip.metric screen px py, (tip.metric == .plane && y.isNone) with
   | some hit, false =>
     let text := if tip.shared then Tooltip.sharedText fmt tip.showX traces x else Tooltip.single fmt tip.showX traces hit
     match text with
     | some text =>
-      let style ← c.tip.get "style" Value
-      c.tip.set "textContent" text
-      style.set "left" "0px"
-      style.set "top" "0px"
-      style.set "display" "block"
-      let (ox, oy) := scene.access.plotOrigin
       let (ax, ay) := match tip.anchor, y with
         | .pointer, some _ => (px, py)
         | _, _ => (hit.x, hit.y)
-      let size ← c.tip.callMethod "getBoundingClientRect" #[] Value
-      let canvasTop ← c.canvas.get "offsetTop" Float
-      let (left, top) := tip.place (ox + ax) (canvasTop + oy + ay) (← size.get "width" Float) (← size.get "height" Float)
-        (← c.el.get "clientWidth" Float) (← c.el.get "clientHeight" Float)
-      style.set "left" s!"{left}px"
-      style.set "top" s!"{top}px"
+      openTip c scene tip text ax ay
     | none => off
   | _, _ => off
 
@@ -868,6 +907,7 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   let tooltipName ← getAttr c.el "tooltip"
   let legendName ← getAttr c.el "legend"
   let numbersName ← getAttr c.el "number-format"
+  let highlightName ← getAttr c.el "highlight"
   setTitle c (← getAttr c.el "chart-title")
   if let .error message := ChartTheme.parse (← getAttr c.el "theme") then
     fail c message []
@@ -876,12 +916,13 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   | .ok choice => setTheme c choice
   | .error _ => pure ()
   match ChartAttrs.parse src level, Group.parse groupName, CursorStyle.parse cursorName, Interaction.parse interactionName,
-      Tooltip.parse tooltipName, Legend.parseStyle legendName, Numbers.parse numbersName with
-  | .error message, _, _, _, _, _, _ | _, .error message, _, _, _, _, _ | _, _, .error message, _, _, _, _
-  | _, _, _, .error message, _, _, _ | _, _, _, _, .error message, _, _ | _, _, _, _, _, .error message, _
-  | _, _, _, _, _, _, .error message => fail c message []
-  | .ok attrs, .ok group, .ok cursor, .ok interaction, .ok tooltip, .ok legend, .ok numbers =>
+      Tooltip.parse tooltipName, Legend.parseStyle legendName, Numbers.parse numbersName, Highlight.parse highlightName with
+  | .error message, _, _, _, _, _, _, _ | _, .error message, _, _, _, _, _, _ | _, _, .error message, _, _, _, _, _
+  | _, _, _, .error message, _, _, _, _ | _, _, _, _, .error message, _, _, _ | _, _, _, _, _, .error message, _, _
+  | _, _, _, _, _, _, .error message, _ | _, _, _, _, _, _, _, .error message => fail c message []
+  | .ok attrs, .ok group, .ok cursor, .ok interaction, .ok tooltip, .ok legend, .ok numbers, .ok highlight =>
     c.tooltipStyle.set tooltip
+    c.highlightOn.set highlight
     c.numberFormat.set numbers
     setLegendStyle c legend
     applyCursorStyle c cursor
@@ -1071,12 +1112,13 @@ private def recursor (c : Chart) (value : Option String) : IO Unit := do
     applyCursorStyle c style
     invalidate c
 
-/-- A change of `tooltip`, `legend` or `number-format` redraws them without reloading the chart. -/
-private def reprobe (c : Chart) (tooltip legend numbers : Option String) : IO Unit := do
-  match Tooltip.parse tooltip, Legend.parseStyle legend, Numbers.parse numbers with
-  | .error message, _, _ | _, .error message, _ | _, _, .error message => fail c message []
-  | .ok t, .ok l, .ok n =>
+/-- A change of `tooltip`, `legend`, `number-format` or `highlight` redraws them without reloading the chart. -/
+private def reprobe (c : Chart) (tooltip legend numbers highlight : Option String) : IO Unit := do
+  match Tooltip.parse tooltip, Legend.parseStyle legend, Numbers.parse numbers, Highlight.parse highlight with
+  | .error message, _, _, _ | _, .error message, _, _ | _, _, .error message, _ | _, _, _, .error message => fail c message []
+  | .ok t, .ok l, .ok n, .ok h =>
     c.tooltipStyle.set t
+    c.highlightOn.set h
     c.numberFormat.set n
     setLegendStyle c l
     refreshProbe c
@@ -1102,15 +1144,16 @@ private def changed (loader : Loader) (args : Array Data) : Async Unit := do
       | some (.string "cursor") => recursor c (← getAttr c.el "cursor")
       | some (.string "interaction") => reinput c (← getAttr c.el "interaction")
       | some (.string "chart-title") => setTitle c (← getAttr c.el "chart-title")
-      | some (.string "tooltip") | some (.string "legend") | some (.string "number-format") =>
-        reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend") (← getAttr c.el "number-format")
+      | some (.string "tooltip") | some (.string "legend") | some (.string "number-format")
+      | some (.string "highlight") =>
+        reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend") (← getAttr c.el "number-format") (← getAttr c.el "highlight")
       | _ => load c loader
 
 private def define (tag : String) (loader : Loader) (resizes buttons : Bool) : IO Unit := do
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend", "number-format", "chart-title", "theme"]
+  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend", "number-format", "chart-title", "theme", "highlight"]
     (← Function.ofFn (connect loader resizes · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))

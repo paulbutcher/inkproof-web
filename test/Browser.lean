@@ -66,6 +66,14 @@ def groupedValuesScene (src : String) : Async Scene := do
       { name := "State", color := "#888", labels := #["State"], xs := #[10, 20, 30],
         values := #[#[7], #[8], #[0.0 / 0.0]] }] } }
 
+/-- The accessible scene with two overlapping items and one apart: a described bar over x 10 to 30 and y 0 to 50, a bar over x 20 to 40 and y 0 to 80 with no description, and a described region over x 60 to 80 and y 20 to 60. -/
+def itemsScene (src : String) : Async Scene := do
+  let scene ← accessibleScene src
+  return { scene with access := { scene.access with items := #[
+    { x0 := 10, x1 := 30, y0 := 0, y1 := 50, description := some "Bar A" },
+    { x0 := 20, x1 := 40, y0 := 0, y1 := 80 },
+    { x0 := 60, x1 := 80, y0 := 20, y1 := 60, description := some "Region" }] } }
+
 /-- A scene with one series of 500001 points, over a view of 0 to 500000. -/
 def hugeScene (src : String) : Async Scene := do
   let scene ← fetchScene src
@@ -147,6 +155,7 @@ def main : IO Unit := do
   register "inkproof-values-chart" groupedValuesScene
   register "inkproof-huge-chart" hugeScene
   register "inkproof-inset-chart" insetScene
+  register "inkproof-items-chart" itemsScene
   register "inkproof-chart"
   register "inkproof-labelled-chart" labelledScene
   register "inkproof-turned-chart" turnedScene

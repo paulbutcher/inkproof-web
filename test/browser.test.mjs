@@ -1116,6 +1116,45 @@ test('with drag="off" a mouse drag does not pan but a pinch still zooms', async 
   await context.close();
 });
 
+test('the item under the cursor is filled and its description shown instead of the nearest point', async () => {
+  const { page, context } = await open('/highlight.html');
+  await drawn(page, 1);
+  const move = (x, y) => page.evaluate(([x, y]) => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: rect.left + x, clientY: rect.top + y }));
+  }, [x, y]);
+  const state = () => page.evaluate(() => {
+    const root = document.getElementById('a').shadowRoot;
+    const h = root.querySelector('.highlight');
+    const host = document.getElementById('a').getBoundingClientRect();
+    const r = h.getBoundingClientRect();
+    return { shown: getComputedStyle(h).display !== 'none', left: r.left - host.left, top: r.top - host.top, width: r.width, height: r.height,
+      tip: getComputedStyle(root.querySelector('.tip')).display === 'none' ? '' : root.querySelector('.tip').textContent };
+  });
+  await page.evaluate(() => document.getElementById('a').setAttribute('tooltip', 'xy'));
+  // 4 pixels per unit across, 2 up; the second bar (x 20 to 40, y 0 to 80) lies over the first where they overlap.
+  await move(100, 180);
+  let s = await state();
+  assert.ok(s.shown && Math.abs(s.left - 80) < 1 && Math.abs(s.width - 80) < 1 && Math.abs(s.top - 40) < 1 && Math.abs(s.height - 160) < 1, `the topmost item is filled: ${JSON.stringify(s)}`);
+  assert.notEqual(s.tip, 'Bar A', 'an item with no description leaves the nearest point tooltip');
+  await move(60, 180);
+  s = await state();
+  assert.equal(s.tip, 'Bar A', 'the described item shows its description');
+  assert.ok(Math.abs(s.left - 40) < 1 && Math.abs(s.width - 80) < 1, `its own extent is filled: ${JSON.stringify(s)}`);
+  await move(280, 120);
+  s = await state();
+  assert.equal(s.tip, 'Region');
+  await move(200, 20);
+  s = await state();
+  assert.ok(!s.shown, 'nothing is filled where no item lies');
+  await page.evaluate(() => document.getElementById('a').setAttribute('highlight', 'off'));
+  await move(60, 180);
+  s = await state();
+  assert.ok(!s.shown && s.tip !== 'Bar A', `with highlight off an item is neither filled nor described: ${JSON.stringify(s)}`);
+  await context.close();
+});
+
 test('the tooltip stays inside the chart, moves by its offset and takes its look from custom properties', async () => {
   const { page, context } = await open('/tooltip.html');
   await drawn(page, 1);

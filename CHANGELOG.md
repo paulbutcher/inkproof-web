@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.27.0]
+
+- The `highlight` attribute fills the item under the pointer and shows its description as a tooltip; the application gives the items in `Access.items`.
+
 ## [0.26.0]
 
 - The `theme` attribute (`light`, `dark` or `auto`) fills the plot with the theme's background and sets the legend, tooltip and title colours; `registerThemed` gives the loader the theme for `Theme.applyAxis`.

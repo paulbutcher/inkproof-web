@@ -6,6 +6,7 @@ import Inkproof.Axis.NumberFormat
 import Inkproof.Core.Proofs.Decimal
 import Inkproof.Float.RatLemmas
 import Inkproof.Viewport.View
+import Inkproof.Web.Item
 import Inkproof.Web.Probe
 
 namespace Inkproof.Web
@@ -138,6 +139,8 @@ structure Access where
   traces : Array Trace := #[]
   /-- Groups of named values per x, which the legend shows beside the series. -/
   groups : Array ValueGroup := #[]
+  /-- Regions of the plot the `highlight` attribute fills under the cursor, and whose descriptions the tooltip shows; later ones lie over earlier ones. -/
+  items : Array Item := #[]
 
 /-- A number as people write it: no trailing zeros, and no point on a whole number. -/
 def showFloat (f : Float) : String := String.ofList (Inkproof.Core.Decimal.trimZeros (toString f).toList)
