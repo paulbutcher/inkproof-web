@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.26.0]
+
+- The `theme` attribute (`light`, `dark` or `auto`) fills the plot with the theme's background and sets the legend, tooltip and title colours; `registerThemed` gives the loader the theme for `Theme.applyAxis`.
+- Requires Scene 0.32.0.
+
 ## [0.25.2]
 
 - The `chart-title` attribute draws a centred title above the plot, which shrinks by its height.

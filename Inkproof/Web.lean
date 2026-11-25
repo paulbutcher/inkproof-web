@@ -24,5 +24,6 @@ import Inkproof.Web.Facet
 import Inkproof.Web.Interaction
 import Inkproof.Web.Tooltip
 import Inkproof.Web.Numbers
+import Inkproof.Web.ChartTheme
 
 /-! # Inkproof.Web -/

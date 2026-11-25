@@ -1000,6 +1000,34 @@ test('a title sits above the plot inside the element, and the plot shrinks by it
   await context.close();
 });
 
+test('a theme fills the plot with its background, follows the page when auto, and reaches the loader', async () => {
+  const corner = page => page.evaluate(() => {
+    const el = document.querySelector('inkproof-themed-chart');
+    const c = el.shadowRoot.querySelector('canvas');
+    return { rgba: [...c.getContext('2d').getImageData(2, 2, 1, 1).data], theme: el.getAttribute('data-theme') };
+  });
+  const { page, context } = await open('/themed.html');
+  await drawn(page, 1);
+  assert.deepEqual(await corner(page), { rgba: [18, 18, 18, 255], theme: 'dark' });
+  const n = await page.evaluate(() => window.draws.length);
+  await page.evaluate(() => document.querySelector('inkproof-themed-chart').setAttribute('theme', 'light'));
+  await drawn(page, n + 1);
+  assert.deepEqual(await corner(page), { rgba: [255, 255, 255, 255], theme: 'light' });
+  await page.evaluate(() => document.querySelector('inkproof-themed-chart').removeAttribute('theme'));
+  await settle(page);
+  assert.deepEqual(await corner(page), { rgba: [0, 0, 0, 0], theme: null });
+  await context.close();
+  const dark = await open('/themed.html', { colorScheme: 'dark' });
+  await dark.page.evaluate(() => document.querySelector('inkproof-themed-chart').setAttribute('theme', 'auto'));
+  await settle(dark.page);
+  assert.equal((await corner(dark.page)).theme, 'dark');
+  await dark.context.close();
+  const bad = await open('/themed.html');
+  await bad.page.evaluate(() => document.querySelector('inkproof-themed-chart').setAttribute('theme', 'blue'));
+  assert.equal((await bad.page.evaluate(() => window.errors)).length, 1);
+  await bad.context.close();
+});
+
 test('a clipped draw covers the whole plot at any device pixel ratio', async () => {
   for (const factor of [1, 2, 3]) {
     const { page, context } = await open('/pixels.html', { deviceScaleFactor: factor });

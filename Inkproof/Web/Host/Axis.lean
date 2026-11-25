@@ -11,12 +11,6 @@ open Inkproof.Scene Inkproof.Axis
 
 private def ratToFloat (q : Rat) : Float := Float.ofInt q.num / Float.ofNat q.den
 
-/-- A colour as CSS writes it. -/
-def colorCss (c : Color) : String :=
-  s!"rgba({c.r}, {c.g}, {c.b}, {showFloat (c.a.toFloat / 255)})"
-
-theorem colorCss_eq (c : Color) : colorCss c = s!"rgba({c.r}, {c.g}, {c.b}, {showFloat (c.a.toFloat / 255)})" := rfl
-
 /-- A text style as a Canvas 2D font. -/
 def textFont (s : TextStyle) : String :=
   s!"{showFloat (ratToFloat s.size)}px {s.family}"

@@ -21,6 +21,11 @@ def labelledScene (src : String) : Async Scene := do
   let layout := Inkproof.Axis.layoutLabels measure 4 positioned
   return { scene with labels := layout.kept.toArray.map fun (x, text) => { text, x, y := 100 } }
 
+/-- A scene that draws nothing, with a label in the colour of the theme's text, or in none without a theme. -/
+def themedScene (_ : String) (_ _ : Nat × Nat) (theme : Option Inkproof.Scene.Theme) : Async Scene := do
+  let color := (theme.map fun t => colorCss t.text).getD "#000"
+  return { commands := ByteArray.mk (encode [⟨8, [.words []]⟩, ⟨6, [.u32 0]⟩, ⟨7, [.u32 0]⟩]).toArray, labels := #[{ text := "themed", x := 20, y := 100, color }] }
+
 /-- The same text twice: centred on its anchor, and as Scene's vertical label under a bottom axis, a quarter turn anticlockwise with its end at the anchor. -/
 def turnedScene (src : String) : Async Scene := do
   let scene ← fetchScene src
@@ -147,6 +152,7 @@ def main : IO Unit := do
   register "inkproof-turned-chart" turnedScene
   register "inkproof-second-chart" secondLineScene
   registerSized "inkproof-sized-chart" sizedScene
+  registerThemed "inkproof-themed-chart" themedScene
   registerPixels "inkproof-pixel-chart" clippedScene
   let doc ← (← global).get "document"
   if let .ref el _ ← doc.callMethod "querySelector" #[toJS "inkproof-replacing-chart"] Data then

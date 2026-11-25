@@ -33,6 +33,23 @@ def Inkproof.Web.ChartAttrs.parse : Option String → Option String → Except S
 theorem Inkproof.Web.ChartAttrs.parse_missing_src : ∀ (l : Option String), ∃ e, Inkproof.Web.ChartAttrs.parse Option.none l = Except.error e
 theorem Inkproof.Web.ChartAttrs.parse_ok : ∀ {s : String}, s ≠ "" → ∀ (l : Option Inkproof.Web.Level), Inkproof.Web.ChartAttrs.parse (Option.some s) (Option.map Inkproof.Web.Level.name l) = Except.ok { src := s, logLevel := l }
 field Inkproof.Web.ChartAttrs.src : Inkproof.Web.ChartAttrs → String
+inductive Inkproof.Web.ChartTheme : Type
+constructor Inkproof.Web.ChartTheme.auto : Inkproof.Web.ChartTheme
+constructor Inkproof.Web.ChartTheme.dark : Inkproof.Web.ChartTheme
+constructor Inkproof.Web.ChartTheme.light : Inkproof.Web.ChartTheme
+def Inkproof.Web.ChartTheme.ofNat : Nat → Inkproof.Web.ChartTheme
+theorem Inkproof.Web.ChartTheme.ofNat_ctorIdx : ∀ (x : Inkproof.Web.ChartTheme), Inkproof.Web.ChartTheme.ofNat x.ctorIdx = x
+def Inkproof.Web.ChartTheme.parse : Option String → Except String (Option Inkproof.Web.ChartTheme)
+theorem Inkproof.Web.ChartTheme.parse_auto : Inkproof.Web.ChartTheme.parse (Option.some "auto") = Except.ok (Option.some Inkproof.Web.ChartTheme.auto)
+theorem Inkproof.Web.ChartTheme.parse_dark : Inkproof.Web.ChartTheme.parse (Option.some "dark") = Except.ok (Option.some Inkproof.Web.ChartTheme.dark)
+theorem Inkproof.Web.ChartTheme.parse_empty : ∃ e, Inkproof.Web.ChartTheme.parse (Option.some "") = Except.error e
+theorem Inkproof.Web.ChartTheme.parse_light : Inkproof.Web.ChartTheme.parse (Option.some "light") = Except.ok (Option.some Inkproof.Web.ChartTheme.light)
+theorem Inkproof.Web.ChartTheme.parse_none : Inkproof.Web.ChartTheme.parse Option.none = Except.ok Option.none
+theorem Inkproof.Web.ChartTheme.parse_unknown : ∃ e, Inkproof.Web.ChartTheme.parse (Option.some "blue") = Except.error e
+def Inkproof.Web.ChartTheme.resolve : Bool → Inkproof.Web.ChartTheme → Inkproof.Scene.Theme
+theorem Inkproof.Web.ChartTheme.resolve_auto : ∀ (p : Bool), Inkproof.Web.ChartTheme.resolve p Inkproof.Web.ChartTheme.auto = if p = Bool.true then Inkproof.Scene.Theme.dark else Inkproof.Scene.Theme.light
+theorem Inkproof.Web.ChartTheme.resolve_dark : ∀ (p : Bool), Inkproof.Web.ChartTheme.resolve p Inkproof.Web.ChartTheme.dark = Inkproof.Scene.Theme.dark
+theorem Inkproof.Web.ChartTheme.resolve_light : ∀ (p : Bool), Inkproof.Web.ChartTheme.resolve p Inkproof.Web.ChartTheme.light = Inkproof.Scene.Theme.light
 inductive Inkproof.Web.Command : Type
 constructor Inkproof.Web.Command.cursorFirst : Inkproof.Web.Command
 constructor Inkproof.Web.Command.cursorLast : Inkproof.Web.Command
@@ -512,6 +529,7 @@ instance Inkproof.Web.instBEqNav : BEq Inkproof.Web.Nav
 def Inkproof.Web.instBEqNav.beq : Inkproof.Web.Nav → Inkproof.Web.Nav → Bool
 instance Inkproof.Web.instDecidableEqChartAttrs : DecidableEq Inkproof.Web.ChartAttrs
 def Inkproof.Web.instDecidableEqChartAttrs.decEq : (x x_1 : Inkproof.Web.ChartAttrs) → Decidable (x = x_1)
+instance Inkproof.Web.instDecidableEqChartTheme : DecidableEq Inkproof.Web.ChartTheme
 instance Inkproof.Web.instDecidableEqCommand : DecidableEq Inkproof.Web.Command
 def Inkproof.Web.instDecidableEqCommand.decEq : (x x_1 : Inkproof.Web.Command) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqCursorMode : DecidableEq Inkproof.Web.CursorMode
@@ -533,6 +551,8 @@ instance Inkproof.Web.instInhabitedTextCache : Inhabited Inkproof.Web.TextCache
 def Inkproof.Web.instInhabitedTextCache.default : Inkproof.Web.TextCache
 instance Inkproof.Web.instReprChartAttrs : Repr Inkproof.Web.ChartAttrs
 def Inkproof.Web.instReprChartAttrs.repr : Inkproof.Web.ChartAttrs → Nat → Std.Format
+instance Inkproof.Web.instReprChartTheme : Repr Inkproof.Web.ChartTheme
+def Inkproof.Web.instReprChartTheme.repr : Inkproof.Web.ChartTheme → Nat → Std.Format
 instance Inkproof.Web.instReprCommand : Repr Inkproof.Web.Command
 def Inkproof.Web.instReprCommand.repr : Inkproof.Web.Command → Nat → Std.Format
 instance Inkproof.Web.instReprFrame : Repr Inkproof.Web.Frame

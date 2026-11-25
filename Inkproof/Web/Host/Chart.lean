@@ -22,6 +22,7 @@ import Inkproof.Web.CursorStyle
 import Inkproof.Web.Interaction
 import Inkproof.Web.Tooltip
 import Inkproof.Web.Numbers
+import Inkproof.Web.ChartTheme
 import Inkproof.Web.Group
 import Inkproof.Web.Input
 import Inkproof.Web.Select
@@ -31,7 +32,7 @@ import Inkproof.Web.Host.Gpu
 import Inkproof.Web.Host.Element
 
 namespace Inkproof.Web.Host
-open Lasm.JS Inkproof.Viewport
+open Lasm.JS Inkproof.Viewport Inkproof.Scene
 
 /-- Which side of its anchor a label's text lies on along the baseline. -/
 inductive Align where
@@ -107,8 +108,8 @@ def fetchScene (src : String) : Async Scene := do
     throw (IO.userError s!"fetching {src} gave status {← response.status}")
   return { commands := ← response.bytes }
 
-/-- Makes the scene for a `src`, the CSS size of the chart's canvas and its backing store size in device pixels. -/
-private abbrev Loader := String → Nat × Nat → Nat × Nat → Async Scene
+/-- Makes the scene for a `src`, the CSS size of the chart's canvas, its backing store size in device pixels and the theme its `theme` attribute names, if any. -/
+private abbrev Loader := String → Nat × Nat → Nat × Nat → Option Theme → Async Scene
 
 private structure Shared where
   canvas : Value
@@ -140,6 +141,7 @@ private structure Chart where
   markerStyle : IO.Ref MarkerStyle
   tooltipStyle : IO.Ref (Option Tooltip.Style)
   numberFormat : IO.Ref (Option Inkproof.Axis.NumberFormat)
+  theme : IO.Ref (Option Theme)
   /-- The legend's style, none when it shows no legend. -/
   legendStyle : IO.Ref (Option Legend.Style)
   /-- Which series the legend has hidden, by index. -/
@@ -232,6 +234,18 @@ private def activeTraces (c : Chart) (scene : Scene) : IO (Array Trace) := do
   let mask ← c.hidden.get
   return scene.access.traces.mapIdx fun i t => { t with hidden := mask[i]?.getD t.hidden }
 
+/-- A colour as CSS writes it. -/
+def colorCss (c : Color) : String :=
+  s!"rgba({c.r}, {c.g}, {c.b}, {showFloat (c.a.toFloat / 255)})"
+
+theorem colorCss_eq (c : Color) : colorCss c = s!"rgba({c.r}, {c.g}, {c.b}, {showFloat (c.a.toFloat / 255)})" := rfl
+
+/-- Fill the canvas with the theme's background, under the data layers, which are transparent where they draw nothing. -/
+private def fillBackground (c : Chart) (size : Size) : IO Unit := do
+  if let some t ← c.theme.get then
+    c.ctx.set "fillStyle" (colorCss t.background)
+    c.ctx.callMethod "fillRect" #[toJS 0, toJS 0, toJS size.width, toJS size.height] Unit
+
 private def draw (c : Chart) : IO Unit := do
   let size ← c.size.get
   let some scene ← c.scene.get | return
@@ -247,10 +261,12 @@ private def draw (c : Chart) : IO Unit := do
     run s.gl (← s.state.get) scene.commands
     c.ctx.callMethod "setTransform" #[toJS 1, toJS 0, toJS 0, toJS 1, toJS 0, toJS 0] Unit
     c.ctx.callMethod "clearRect" #[toJS 0, toJS 0, toJS size.width, toJS size.height] Unit
+    fillBackground c size
     c.ctx.callMethod "drawImage" #[toJS s.canvas, toJS 0, toJS 0] Unit
   else
     c.ctx.callMethod "setTransform" #[toJS 1, toJS 0, toJS 0, toJS 1, toJS 0, toJS 0] Unit
     c.ctx.callMethod "clearRect" #[toJS 0, toJS 0, toJS size.width, toJS size.height] Unit
+    fillBackground c size
   let scale := ratio.toFloat / 1000
   c.ctx.callMethod "setTransform" #[toJS scale, toJS 0, toJS 0, toJS scale, toJS 0, toJS 0] Unit
   for label in scene.labels do
@@ -361,14 +377,21 @@ private partial def watchRatio (c : Chart) (after : IO Unit) : IO Unit := do
   query.callMethod "addEventListener" #[toJS "change", toJS changed, obj [("once", .bool true)]] Unit
   c.ratioQuery.set (some (query, changed))
 
+/-- The custom properties a theme sets on the element, for the stylesheet's fallbacks. -/
+private def themeRule (name : String) (t : Theme) : String :=
+  s!":host([data-theme={name}])" ++ "{" ++
+    s!"--inkproof-theme-tooltip-color:{colorCss t.tooltipText};--inkproof-theme-tooltip-background:{colorCss t.tooltipFill};--inkproof-theme-border:{colorCss t.border};--inkproof-theme-legend-color:{colorCss t.legendText};" ++
+    s!"color:{colorCss t.text}" ++ "}"
+
 private def styles : String :=
+  themeRule "light" .light ++ themeRule "dark" .dark ++
   ":host{display:block;width:300px;height:150px}canvas{display:block;width:100%;height:100%}:host([data-touch-action=none]){touch-action:none}:host([data-touch-action=pan-y]){touch-action:pan-y}:host([data-touch-action=pan-xy]){touch-action:pan-x pan-y}" ++
-  ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:pre;box-sizing:border-box;padding:var(--inkproof-tooltip-padding,2px 6px);color:var(--inkproof-tooltip-color,inherit);background:var(--inkproof-tooltip-background,#fff);border:var(--inkproof-tooltip-border-width,1px) solid var(--inkproof-tooltip-border-color,#888);border-radius:var(--inkproof-tooltip-border-radius,0);box-shadow:var(--inkproof-tooltip-shadow,none);font:var(--inkproof-tooltip-font-size,12px) var(--inkproof-tooltip-font-family,sans-serif)}" ++
-  ".legend{position:absolute;top:0;right:0;display:flex;color:var(--inkproof-legend-color,inherit);font:var(--inkproof-legend-font-size,12px) var(--inkproof-legend-font-family,sans-serif)}.legend button,.legend .entry{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit}.legend button{cursor:pointer;color:var(--inkproof-legend-color,buttontext)}" ++
+  ":host{position:relative}.tip{position:absolute;display:none;pointer-events:none;white-space:pre;box-sizing:border-box;padding:var(--inkproof-tooltip-padding,2px 6px);color:var(--inkproof-tooltip-color,var(--inkproof-theme-tooltip-color,inherit));background:var(--inkproof-tooltip-background,var(--inkproof-theme-tooltip-background,#fff));border:var(--inkproof-tooltip-border-width,1px) solid var(--inkproof-tooltip-border-color,var(--inkproof-theme-border,#888));border-radius:var(--inkproof-tooltip-border-radius,0);box-shadow:var(--inkproof-tooltip-shadow,none);font:var(--inkproof-tooltip-font-size,12px) var(--inkproof-tooltip-font-family,sans-serif)}" ++
+  ".legend{position:absolute;top:0;right:0;display:flex;color:var(--inkproof-legend-color,var(--inkproof-theme-legend-color,inherit));font:var(--inkproof-legend-font-size,12px) var(--inkproof-legend-font-family,sans-serif)}.legend button,.legend .entry{display:flex;gap:4px;align-items:center;border:0;background:none;font:inherit}.legend button{cursor:pointer;color:var(--inkproof-legend-color,var(--inkproof-theme-legend-color,buttontext))}" ++
   ".legend[data-layout=vertical]{flex-direction:column}.legend[data-layout=horizontal]{flex-direction:row;flex-wrap:wrap;align-items:center;gap:0 12px;max-width:100%}" ++
   ".legend[data-place=top-left]{top:0;right:auto;left:0}.legend[data-place=bottom-left]{top:auto;right:auto;bottom:0;left:0}.legend[data-place=bottom-right]{top:auto;bottom:0;right:0}" ++
   ":host([data-legend-below]),:host([data-title]){display:flex;flex-direction:column}:host([data-legend-below]) canvas,:host([data-title]) canvas{flex:1 1 0;min-height:0;height:auto}" ++
-  ".title{display:none;flex:none;text-align:center;color:var(--inkproof-title-color,inherit);font:var(--inkproof-title-font-size,16px) var(--inkproof-title-font-family,sans-serif);padding:var(--inkproof-title-padding,4px 0)}:host([data-title]) .title{display:block}" ++
+  ".title{display:none;flex:none;text-align:center;color:var(--inkproof-title-color,var(--inkproof-theme-legend-color,inherit));font:var(--inkproof-title-font-size,16px) var(--inkproof-title-font-family,sans-serif);padding:var(--inkproof-title-padding,4px 0)}:host([data-title]) .title{display:block}" ++
   ".legend[data-place^=below]{position:static;flex:none;min-height:20px}" ++
   ".legend[data-layout=horizontal][data-place=below-left]{justify-content:flex-start}.legend[data-layout=horizontal][data-place=below-center]{justify-content:center}.legend[data-layout=horizontal][data-place=below-right]{justify-content:flex-end}" ++
   ".legend[data-layout=vertical][data-place=below-left]{align-items:flex-start}.legend[data-layout=vertical][data-place=below-center]{align-items:center}.legend[data-layout=vertical][data-place=below-right]{align-items:flex-end}" ++
@@ -418,7 +441,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl, titleEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, numberFormat := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, numberFormat := ← IO.mkRef none, theme := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -573,6 +596,18 @@ private def setTitle (c : Chart) (title : Option String) : IO Unit := do
   | none =>
     c.titleEl.set "textContent" ""
     c.el.callMethod "removeAttribute" #[toJS "data-title"] Unit
+
+/-- Take up the `theme` attribute: the theme drawn is kept for the loader and the background, and named on the element for the stylesheet's colours. -/
+private def setTheme (c : Chart) (choice : Option ChartTheme) : IO Unit := do
+  match choice with
+  | none =>
+    c.theme.set none
+    c.el.callMethod "removeAttribute" #[toJS "data-theme"] Unit
+  | some choice =>
+    let prefersDark ← (← (← global).callMethod "matchMedia" #[toJS "(prefers-color-scheme: dark)"]).get "matches" Bool
+    let t := choice.resolve prefersDark
+    c.theme.set (some t)
+    c.el.callMethod "setAttribute" #[toJS "data-theme", toJS (match t with | .dark => "dark" | .light => "light")] Unit
 
 /-- Take up a legend style: the stylesheet places the legend by the attributes this sets on it and on the element. -/
 private def setLegendStyle (c : Chart) (style : Option Legend.Style) : IO Unit := do
@@ -834,6 +869,12 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   let legendName ← getAttr c.el "legend"
   let numbersName ← getAttr c.el "number-format"
   setTitle c (← getAttr c.el "chart-title")
+  if let .error message := ChartTheme.parse (← getAttr c.el "theme") then
+    fail c message []
+    return
+  match ChartTheme.parse (← getAttr c.el "theme") with
+  | .ok choice => setTheme c choice
+  | .error _ => pure ()
   match ChartAttrs.parse src level, Group.parse groupName, CursorStyle.parse cursorName, Interaction.parse interactionName,
       Tooltip.parse tooltipName, Legend.parseStyle legendName, Numbers.parse numbersName with
   | .error message, _, _, _, _, _, _ | _, .error message, _, _, _, _, _ | _, _, .error message, _, _, _, _
@@ -852,7 +893,7 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
     try
       let sizes ← sceneSizes c
       c.sceneSize.set sizes
-      let scene ← loader attrs.src sizes.1 sizes.2
+      let scene ← loader attrs.src sizes.1 sizes.2 (← c.theme.get)
       -- A newer load or a disconnect has overtaken this one.
       if (← c.generation.get) == generation && (← c.alive.get) then
         c.scene.set (some scene)
@@ -896,7 +937,7 @@ private def settle (c : Chart) (loader : Loader) : IO Unit := do
       let sizes ← sceneSizes c
       c.sceneSize.set sizes
       try
-        let scene ← loader ((← getAttr c.el "src").getD "") sizes.1 sizes.2
+        let scene ← loader ((← getAttr c.el "src").getD "") sizes.1 sizes.2 (← c.theme.get)
         if (← c.alive.get) && (← c.resizes.get) == token then setScene c.el scene
       catch e =>
         fail c s!"making the scene for the new size failed: {e}" [("size", s!"{sizes.1.1}x{sizes.1.2}")]
@@ -1069,21 +1110,25 @@ private def define (tag : String) (loader : Loader) (resizes buttons : Bool) : I
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend", "number-format", "chart-title"]
+  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend", "number-format", "chart-title", "theme"]
     (← Function.ofFn (connect loader resizes · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))
 
 /-- Define the custom element `tag`: it draws the scene `loader` makes of its `src` attribute. With `buttons`, the page's `button[data-reset]` and `button[data-unlink]` act on the charts they name, with no page code. -/
 def register (tag : String) (loader : String → Async Scene := fetchScene) (buttons : Bool := false) : IO Unit :=
-  define tag (fun src _ _ => loader src) false buttons
+  define tag (fun src _ _ _ => loader src) false buttons
 
 /-- Like `register`, for a chart whose scene depends on its size: `loader` is given the `src` and the canvas's CSS width and height, and is called again, after the size has stopped changing for a moment, with the new size. The chart keeps its view, cursor and hidden series across the new scene. -/
 def registerSized (tag : String) (loader : String → Nat → Nat → Async Scene) (buttons : Bool := false) : IO Unit :=
-  define tag (fun src css _ => loader src css.1 css.2) true buttons
+  define tag (fun src css _ _ => loader src css.1 css.2) true buttons
 
 /-- Like `registerSized`, for a chart whose commands are in device pixels, such as a Gpu frame for a target of a given size: `loader` is given the backing store's size too, which follows the device pixel ratio, and is called again when either size changes. A clip or a stroke width in the commands is then in the pixels of the canvas, whatever the ratio. -/
 def registerPixels (tag : String) (loader : String → Nat × Nat → Nat × Nat → Async Scene) (buttons : Bool := false) : IO Unit :=
+  define tag (fun src css px _ => loader src css px) true buttons
+
+/-- Like `registerPixels`, for a chart that draws in a theme: `loader` is also given the theme the `theme` attribute names (`auto` resolved by the page's colour scheme at the time), none without the attribute, and is called again when the attribute changes. An application passes it to Scene's `Theme.applyAxis` and the series styles, so the scene's axes, gridlines and labels have the theme's colours. -/
+def registerThemed (tag : String) (loader : String → Nat × Nat → Nat × Nat → Option Theme → Async Scene) (buttons : Bool := false) : IO Unit :=
   define tag loader true buttons
 
 end Inkproof.Web.Host
