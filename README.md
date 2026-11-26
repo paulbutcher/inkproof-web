@@ -22,6 +22,9 @@ Modules that import Lasm (`Inkproof.Web.Host.*`) build only under Lasm's browser
 - Draw text over a chart, anchored and aligned on a point and turned about it, as axis labels need: `Host.Label` with `align`, `baseline` and `rotation`, and an optional `second` line under it.
 - Turn the labels Scene places for an axis into Canvas 2D labels, aligned and turned as each side of the plot needs: `Host.Label.ofPlaced`, `Host.Label.ofDrawing`.
 - Put a title beside an axis, 8 pixels beyond its widest tick label, centred on the plot's edge, turned on a left or right axis, in the axis's label colour, and learn the margin the labels, gap and title need: `Host.axisTitleMeasured` (or `Host.axisTitle` with your own measurements), `Host.Label.ofTitle`, `Host.axisTitleGap`.
+- Hear which legend entry a click hid or showed, and keep each chart's hidden series without writing the listener: `Host.registerRetainedAs` (the chart is redrawn by what you build, given the hidden series), `Host.decodeSeriesEvent`, `SeriesEvent`, `Hidden.apply`.
+- Give a loader the canvas's CSS size, backing size and theme as one value, and draw a frame in its pixels: `Host.registerCanvas`, `Host.registerCanvasTitled`, `Pixels`, `Pixels.frameBytes`, `Pixels.ratio`, `Pixels.background`.
+- Keep a chart's GPU buffers and retained layers across redraws, per chart: `Host.Retention`, `Retention.build`, `Retention.invalidate`.
 - Give an axis's title as text on the element and have the loader place it: the `axis-title-left`, `-right`, `-top` and `-bottom` attributes, `Host.registerTitled`, `Host.AxisTitles`.
 - Measure text once per font and string: `TextCache`.
 - Read and validate the element's attributes, reporting bad ones instead of defaulting them: `ChartAttrs.parse`.

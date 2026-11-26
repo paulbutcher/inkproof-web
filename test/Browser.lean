@@ -7,6 +7,7 @@ import Inkproof.Web.Host.Axis
 import Inkproof.Web.Host.Chart
 import Inkproof.Web.Host.Measure
 import Inkproof.Web.Host.SceneCache
+import Inkproof.Web.Host.Retained
 import Inkproof.Gpu.Compile
 import Inkproof.Viewport.View
 

@@ -220,7 +220,31 @@ def tooltipParseCase : TestCase :=
       | _ => false
     check (bad "shared xy" && bad "x xy" && bad "top-left top-right" && bad "12 13" && bad "wide" && offset) "tooltip words"
 
+/-- A click toggles exactly the series it names, and one outside the chart changes nothing. -/
+def hiddenApplyCase : TestCase :=
+  .mk "a series event changes only the series it names" <|
+    forAll 500 (fun g =>
+        let (n, g) := g.below 8
+        let (s, g) := g.below 12
+        let (c, g) := g.below 12
+        let (b, g) := g.below 2
+        ((n, s, c, b), g))
+      fun (n, s, c, b) =>
+        let off : Hidden := (Array.range n).map (· % 2 == 0)
+        let e : SeriesEvent := { series := s, hidden := b == 0 }
+        let after := Hidden.apply c off e
+        let others := (List.range 14).all fun i => i == s || after.getD i false == off.getD i false
+        let named := if s < c then after.getD s false == e.hidden else after == off
+        check (others && named) s!"{n} {s} {c} {b}"
+
+/-- Only a natural number decodes as a series. -/
+def seriesDecodeCase : TestCase :=
+  .mk "an inkproof-series detail decodes only for a natural number" do
+    let ok := (SeriesEvent.decode 3.0 true) == some { series := 3, hidden := true }
+    let bad := [-1.0, 1.5, 0.0 / 0.0, 1.0 / 0.0].all fun x => (SeriesEvent.decode x false).isNone
+    check (ok && bad) "series decode"
+
 def tests : List TestCase :=
-  [secondAxisCase, bubbleCase, markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase, numberFormatCase, showFloatCase]
+  [hiddenApplyCase, seriesDecodeCase, secondAxisCase, bubbleCase, markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase, numberFormatCase, showFloatCase]
 
 end InkproofWebTest

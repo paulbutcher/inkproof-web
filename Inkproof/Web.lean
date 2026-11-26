@@ -15,6 +15,8 @@ import Inkproof.Web.Group
 import Inkproof.Web.Input
 import Inkproof.Web.Select
 import Inkproof.Web.Events
+import Inkproof.Web.Series
+import Inkproof.Web.Pixels
 import Inkproof.Web.SceneState
 import Inkproof.Web.Probe
 import Inkproof.Web.Legend

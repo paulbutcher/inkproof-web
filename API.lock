@@ -132,6 +132,9 @@ theorem Inkproof.Web.Group.parse_none : Inkproof.Web.Group.parse Option.none = E
 def Inkproof.Web.Group.toggled : Option String → Option String → Option String
 theorem Inkproof.Web.Group.toggled_linked : ∀ (name : String) (named : Option String), Inkproof.Web.Group.toggled (Option.some name) named = Option.none
 theorem Inkproof.Web.Group.toggled_unlinked : ∀ (named : Option String), Inkproof.Web.Group.toggled Option.none named = named
+def Inkproof.Web.Hidden : Type
+def Inkproof.Web.Hidden.apply : Nat → Inkproof.Web.Hidden → Inkproof.Web.SeriesEvent → Inkproof.Web.Hidden
+theorem Inkproof.Web.Hidden.apply_getD : ∀ (count : Nat) (off : Inkproof.Web.Hidden) (e : Inkproof.Web.SeriesEvent) (i : Nat), Array.getD (Inkproof.Web.Hidden.apply count off e) i Bool.false = if i = e.series ∧ e.series < count then e.hidden else Array.getD off i Bool.false
 def Inkproof.Web.Highlight.parse : Option String → Except String Bool
 theorem Inkproof.Web.Highlight.parse_none : Inkproof.Web.Highlight.parse Option.none = Except.ok Bool.false
 theorem Inkproof.Web.Highlight.parse_off : Inkproof.Web.Highlight.parse (Option.some "off") = Except.ok Bool.false
@@ -373,6 +376,17 @@ theorem Inkproof.Web.Numbers.parse_compact : Inkproof.Web.Numbers.parse (Option.
 theorem Inkproof.Web.Numbers.parse_de : Inkproof.Web.Numbers.parse (Option.some "de") = Except.ok (Option.some { locale := Inkproof.Axis.Locale.de })
 theorem Inkproof.Web.Numbers.parse_empty : Inkproof.Web.Numbers.parse (Option.some "") = Except.ok Option.none
 theorem Inkproof.Web.Numbers.parse_none : Inkproof.Web.Numbers.parse Option.none = Except.ok Option.none
+structure Inkproof.Web.Pixels : Type
+def Inkproof.Web.Pixels.background : Inkproof.Web.Pixels → optParam Inkproof.Scene.Color { r := 255, g := 255, b := 255, a := 255 } → Inkproof.Scene.Color
+theorem Inkproof.Web.Pixels.background_eq : ∀ (p : Inkproof.Web.Pixels) (default : Inkproof.Scene.Color), p.background default = p.theme.elim default fun x => x.background
+field Inkproof.Web.Pixels.backing : Inkproof.Web.Pixels → Nat × Nat
+field Inkproof.Web.Pixels.css : Inkproof.Web.Pixels → Nat × Nat
+def Inkproof.Web.Pixels.frameBytes : Inkproof.Web.Pixels → Inkproof.Scene.DisplayList → Inkproof.Scene.Color → ByteArray
+theorem Inkproof.Web.Pixels.frameBytes_eq : ∀ (p : Inkproof.Web.Pixels) (list : Inkproof.Scene.DisplayList) (bg : Inkproof.Scene.Color), p.frameBytes list bg = Inkproof.Gpu.strokeFrameBytes p.backing.fst p.backing.snd (Inkproof.Scene.DisplayList.scale p.ratio list) bg
+constructor Inkproof.Web.Pixels.mk : Nat × Nat → Nat × Nat → Option Inkproof.Scene.Theme → Inkproof.Web.Pixels
+def Inkproof.Web.Pixels.ratio : Inkproof.Web.Pixels → Rat
+theorem Inkproof.Web.Pixels.ratio_eq : ∀ (p : Inkproof.Web.Pixels), p.ratio = if p.css.fst = 0 then 1 else ↑p.backing.fst / ↑p.css.fst
+field Inkproof.Web.Pixels.theme : Inkproof.Web.Pixels → Option Inkproof.Scene.Theme
 structure Inkproof.Web.SceneState : Type
 def Inkproof.Web.SceneState.current : Nat → Nat → Option Inkproof.Web.SceneState → Inkproof.Web.SceneState
 theorem Inkproof.Web.SceneState.current_generation : ∀ (base generation : Nat) (s : Option Inkproof.Web.SceneState), (Inkproof.Web.SceneState.current base generation s).generation = generation
@@ -406,6 +420,13 @@ def Inkproof.Web.SelectMode.ofNat : Nat → Inkproof.Web.SelectMode
 theorem Inkproof.Web.SelectMode.ofNat_ctorIdx : ∀ (x : Inkproof.Web.SelectMode), Inkproof.Web.SelectMode.ofNat x.ctorIdx = x
 constructor Inkproof.Web.SelectMode.off : Inkproof.Web.SelectMode
 constructor Inkproof.Web.SelectMode.x : Inkproof.Web.SelectMode
+structure Inkproof.Web.SeriesEvent : Type
+def Inkproof.Web.SeriesEvent.decode : Float → Bool → Option Inkproof.Web.SeriesEvent
+theorem Inkproof.Web.SeriesEvent.decode_eq : ∀ (series : Float) (hidden : Bool) (e : Inkproof.Web.SeriesEvent), Inkproof.Web.SeriesEvent.decode series hidden = Option.some e → e = { series := series.toUInt64.toNat, hidden := hidden }
+theorem Inkproof.Web.SeriesEvent.decode_hidden : ∀ (series : Float) (hidden : Bool) (e : Inkproof.Web.SeriesEvent), Inkproof.Web.SeriesEvent.decode series hidden = Option.some e → e.hidden = hidden
+field Inkproof.Web.SeriesEvent.hidden : Inkproof.Web.SeriesEvent → Bool
+constructor Inkproof.Web.SeriesEvent.mk : Nat → Bool → Inkproof.Web.SeriesEvent
+field Inkproof.Web.SeriesEvent.series : Inkproof.Web.SeriesEvent → Nat
 structure Inkproof.Web.Size : Type
 def Inkproof.Web.Size.backing : Nat → Nat → Inkproof.Web.Milli → Inkproof.Web.Size
 theorem Inkproof.Web.Size.backing_height : ∀ (w h : Nat) (ratio : Inkproof.Web.Milli), (Inkproof.Web.Size.backing w h ratio).height = Inkproof.Web.backingPx h ratio
@@ -553,6 +574,8 @@ theorem Inkproof.Web.formatLine_eq : ∀ (l : Inkproof.Web.Level) (m : String) (
 theorem Inkproof.Web.formatLine_nil : ∀ (l : Inkproof.Web.Level) (m : String), Inkproof.Web.formatLine l m [] = ToString.toString "[inkproof " ++ ToString.toString l.name ++ ToString.toString "] " ++ ToString.toString m
 instance Inkproof.Web.instBEqNav : BEq Inkproof.Web.Nav
 def Inkproof.Web.instBEqNav.beq : Inkproof.Web.Nav → Inkproof.Web.Nav → Bool
+instance Inkproof.Web.instBEqSeriesEvent : BEq Inkproof.Web.SeriesEvent
+def Inkproof.Web.instBEqSeriesEvent.beq : Inkproof.Web.SeriesEvent → Inkproof.Web.SeriesEvent → Bool
 instance Inkproof.Web.instDecidableEqChartAttrs : DecidableEq Inkproof.Web.ChartAttrs
 def Inkproof.Web.instDecidableEqChartAttrs.decEq : (x x_1 : Inkproof.Web.ChartAttrs) → Decidable (x = x_1)
 instance Inkproof.Web.instDecidableEqChartTheme : DecidableEq Inkproof.Web.ChartTheme
@@ -587,6 +610,8 @@ instance Inkproof.Web.instReprLevel : Repr Inkproof.Web.Level
 def Inkproof.Web.instReprLevel.repr : Inkproof.Web.Level → Nat → Std.Format
 instance Inkproof.Web.instReprNav : Repr Inkproof.Web.Nav
 def Inkproof.Web.instReprNav.repr : Inkproof.Web.Nav → Nat → Std.Format
+instance Inkproof.Web.instReprSeriesEvent : Repr Inkproof.Web.SeriesEvent
+def Inkproof.Web.instReprSeriesEvent.repr : Inkproof.Web.SeriesEvent → Nat → Std.Format
 instance Inkproof.Web.instReprSize : Repr Inkproof.Web.Size
 def Inkproof.Web.instReprSize.repr : Inkproof.Web.Size → Nat → Std.Format
 def Inkproof.Web.nearestBy : {α : Type} → Array (Float × α) → Float → Option (Float × α)

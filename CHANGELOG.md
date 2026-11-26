@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.30.0]
+
+- `registerRetainedAs` decodes the `inkproof-series` event and keeps each chart's hidden series (`SeriesEvent`, `Hidden.apply`), so a page writes no listener.
+- `Pixels`, `registerCanvas`, `registerCanvasTitled` and `Retention` give a loader the canvas's sizes and theme as one value and keep a chart's GPU buffers across redraws.
+
 ## [0.29.0]
 
 - A `Trace` can name the map from its own y values to the first y axis's coordinates (`toLeft`), so a series on a second y axis is found and marked where it is drawn and the tooltip gives its own y.
