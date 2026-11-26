@@ -1,8 +1,11 @@
 # Changelog
 
-## [0.31.1]
+## [0.32.0]
 
+- The `focus` attribute (`Focus.parse`) finds the series nearest the pointer, dispatches `inkproof-focus` and dims the other series' legend entries.
+- `registerFocusedAs` redraws with each series' opacity (`Focus.alphas`).
 - A band of a `select-x` chart shows a grip at each edge; dragging a grip resizes the band and dragging inside it moves it.
+- The `box-auto-uni-Npx` word of the `interaction` attribute zooms both axes for a small box drag and only the longer one for a long thin drag.
 
 ## [0.31.0]
 

@@ -27,6 +27,7 @@ import Inkproof.Web.Interaction
 import Inkproof.Web.Tooltip
 import Inkproof.Web.Item
 import Inkproof.Web.Highlight
+import Inkproof.Web.Focus
 import Inkproof.Web.Numbers
 import Inkproof.Web.ChartTheme
 

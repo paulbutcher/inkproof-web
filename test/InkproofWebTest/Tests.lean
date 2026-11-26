@@ -179,6 +179,25 @@ def facetSizeCase : TestCase :=
     let clash := match Interaction.parse (some "box-x box-auto-uni-50px") with | .error _ => true | .ok _ => false
     check (marker && box && uni && clash) s!"marker {marker} box {box} uni {uni} clash {clash}"
 
+def focusParseCase : TestCase :=
+  .mk "focus words set the opacity and the proximity, and bad ones are reported" do
+    let ok := match Focus.parse (some "0.25 12px") with
+      | .ok (some f) => f.alpha == 0.25 && f.proximity == 12
+      | _ => false
+    let whole := match Focus.parse (some "1 5px") with
+      | .ok (some f) => f.alpha == 1
+      | _ => false
+    let bad (v : String) := match Focus.parse (some v) with | .error _ => true | .ok _ => false
+    check (ok && whole && bad "1.5" && bad "0px" && bad "0.2 0.3" && bad "5px 6px" && bad "wide" && bad ".5")
+      s!"parsed {ok} {whole}"
+
+def focusChooseCase : TestCase :=
+  .mk "the series nearest the pointer within the proximity is focused" do
+    let traces : Array Trace := #[{ name := "a", color := "", xs := #[10], ys := #[10] }, { name := "b", color := "", xs := #[10], ys := #[50] }]
+    let pick (y : Float) := Focus.nearestSeries { proximity := 5 } traces 12 y
+    check (pick 12 == some 0 && pick 48 == some 1 && pick 30 == none)
+      s!"{pick 12} {pick 48} {pick 30}"
+
 def cursorErrorCase : TestCase :=
   .mk "conflicting, unknown and zero cursor words are reported" do
     let bad (v : String) := match CursorStyle.parse (some v) with | .error _ => true | .ok _ => false
@@ -249,6 +268,6 @@ def seriesDecodeCase : TestCase :=
     check (ok && bad) "series decode"
 
 def tests : List TestCase :=
-  [hiddenApplyCase, seriesDecodeCase, secondAxisCase, bubbleCase, markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase, numberFormatCase, showFloatCase]
+  [focusParseCase, focusChooseCase, hiddenApplyCase, seriesDecodeCase, secondAxisCase, bubbleCase, markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase, numberFormatCase, showFloatCase]
 
 end InkproofWebTest

@@ -119,6 +119,20 @@ theorem Inkproof.Web.Facet.positive_succ : ∀ (attr kind word : String) (n : Na
 theorem Inkproof.Web.Facet.positive_zero : ∀ (attr kind word : String), ∃ e, Inkproof.Web.Facet.positive attr kind word 0 = Except.error e
 def Inkproof.Web.Facet.unknown : {α : Type} → String → String → String → Except String α
 theorem Inkproof.Web.Facet.unknown_error : ∀ {α : Type} (attr word expected : String), ∃ e, Inkproof.Web.Facet.unknown attr word expected = Except.error e
+structure Inkproof.Web.Focus : Type
+field Inkproof.Web.Focus.alpha : Inkproof.Web.Focus → Float
+def Inkproof.Web.Focus.alphas : Nat → Float → Option Nat → Array Float
+theorem Inkproof.Web.Focus.alphas_getD : ∀ (count : Nat) (alpha : Float) (focused : Option Nat) (i : Nat), i < count → (Inkproof.Web.Focus.alphas count alpha focused).getD i 1 = match focused with | Option.some f => if i = f then 1 else alpha | Option.none => 1
+theorem Inkproof.Web.Focus.alphas_size : ∀ (count : Nat) (alpha : Float) (focused : Option Nat), (Inkproof.Web.Focus.alphas count alpha focused).size = count
+constructor Inkproof.Web.Focus.mk : Float → Float → Inkproof.Web.Focus
+def Inkproof.Web.Focus.nearestSeries : Inkproof.Web.Focus → Array Inkproof.Web.Trace → Float → Float → Option Nat
+theorem Inkproof.Web.Focus.nearestSeries_eq : ∀ (style : Inkproof.Web.Focus) (traces : Array Inkproof.Web.Trace) (px py : Float), style.nearestSeries traces px py = (Inkproof.Web.Nearest.find Inkproof.Web.Metric.plane traces px py).bind fun c => if Inkproof.Web.Metric.plane.dist px py c ≤ style.proximity * style.proximity then Option.some c.series else Option.none
+def Inkproof.Web.Focus.opacity : String → Option Float
+def Inkproof.Web.Focus.parse : Option String → Except String (Option Inkproof.Web.Focus)
+theorem Inkproof.Web.Focus.parse_empty : ∃ f, Inkproof.Web.Focus.parse (Option.some "") = Except.ok (Option.some f) ∧ f.alpha = 0.3 ∧ f.proximity = 5
+theorem Inkproof.Web.Focus.parse_none : Inkproof.Web.Focus.parse Option.none = Except.ok Option.none
+theorem Inkproof.Web.Focus.parse_off : Inkproof.Web.Focus.parse (Option.some "off") = Except.ok Option.none
+field Inkproof.Web.Focus.proximity : Inkproof.Web.Focus → Float
 structure Inkproof.Web.Frame : Type
 field Inkproof.Web.Frame.dirty : Inkproof.Web.Frame → Bool
 def Inkproof.Web.Frame.drawn : Inkproof.Web.Frame → Inkproof.Web.Frame

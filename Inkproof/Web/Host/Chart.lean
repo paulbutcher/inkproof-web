@@ -21,6 +21,7 @@ import Inkproof.Web.Markers
 import Inkproof.Web.CursorStyle
 import Inkproof.Web.Interaction
 import Inkproof.Web.Tooltip
+import Inkproof.Web.Focus
 import Inkproof.Web.Highlight
 import Inkproof.Web.Numbers
 import Inkproof.Web.ChartTheme
@@ -151,6 +152,10 @@ private structure Chart where
   tooltipStyle : IO.Ref (Option Tooltip.Style)
   /-- Whether the item under the cursor is filled and its description shown. -/
   highlightOn : IO.Ref Bool
+  /-- How series away from the pointer are dimmed, none when they are not. -/
+  focusStyle : IO.Ref (Option Focus)
+  /-- The series nearest the pointer within the focus proximity, which the application has been told keeps full opacity. -/
+  focused : IO.Ref (Option Nat)
   numberFormat : IO.Ref (Option Inkproof.Axis.NumberFormat)
   theme : IO.Ref (Option Theme)
   /-- The legend's style, none when it shows no legend. -/
@@ -459,7 +464,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl, highlightEl, titleEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, highlightOn := ← IO.mkRef false, numberFormat := ← IO.mkRef none, theme := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, dblclickReset := ← IO.mkRef false, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, highlightOn := ← IO.mkRef false, focusStyle := ← IO.mkRef none, focused := ← IO.mkRef none, numberFormat := ← IO.mkRef none, theme := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, dblclickReset := ← IO.mkRef false, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -694,6 +699,8 @@ private def showLegend (c : Chart) (scene : Scene) : IO Unit := do
     let label ← newElement doc "span"
     label.set "textContent" (if live then Legend.text fmt row else row.name)
     button.callMethod "append" #[toJS swatch, toJS label] Unit
+    if let (some f, some focus) := (← c.focused.get, ← c.focusStyle.get) then
+      if i != f && !row.hidden then (← button.get "style" Value).set "opacity" (toString focus.alpha)
     c.legendEl.callMethod "append" #[toJS button] Unit
   for (g, gi) in (← activeGroups c scene).zipIdx do
     for row in Legend.groupRows g cursorX do
@@ -710,9 +717,23 @@ private def showLegend (c : Chart) (scene : Scene) : IO Unit := do
       entry.callMethod "append" #[toJS swatch, toJS label] Unit
       c.legendEl.callMethod "append" #[toJS entry] Unit
 
+/-- Find the series that keeps full opacity, and tell the application when it changes: it draws the others at the style's opacity, since only it can redraw them. -/
+private def updateFocus (c : Chart) (scene : Scene) : IO Unit := do
+  let style ← c.focusStyle.get
+  let next ← match style, ← c.cursor.get, scene.access.view with
+    | some style, some (x, some y), some config => do
+      let view := ((← c.nav.get).map (·.view)).getD (View.home config)
+      let screen := (← activeTraces c scene).map (·.onScreen config view)
+      pure (Focus.nearestSeries style screen (view.x.toScreen config.x x) (config.y.length - view.y.toScreen config.y y))
+    | _, _, _ => pure none
+  if next != (← c.focused.get) then
+    c.focused.set next
+    dispatch c.el "inkproof-focus" (obj [("series", next.elim .null toJS), ("alpha", toJS ((style.map (·.alpha)).getD 1))])
+
 /-- Bring the tooltip and legend up to date with the cursor, the scene and the hidden series. -/
 private def refreshProbe (c : Chart) : IO Unit := do
   if let some scene ← c.scene.get then
+    updateFocus c scene
     showTooltip c scene
     showLegend c scene
 
@@ -931,6 +952,7 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   let legendName ← getAttr c.el "legend"
   let numbersName ← getAttr c.el "number-format"
   let highlightName ← getAttr c.el "highlight"
+  let focusName ← getAttr c.el "focus"
   setTitle c (← getAttr c.el "chart-title")
   if let .error message := ChartTheme.parse (← getAttr c.el "theme") then
     fail c message []
@@ -939,11 +961,12 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
   | .ok choice => setTheme c choice
   | .error _ => pure ()
   match ChartAttrs.parse src level, Group.parse groupName, CursorStyle.parse cursorName, Interaction.parse interactionName,
-      Tooltip.parse tooltipName, Legend.parseStyle legendName, Numbers.parse numbersName, Highlight.parse highlightName with
-  | .error message, _, _, _, _, _, _, _ | _, .error message, _, _, _, _, _, _ | _, _, .error message, _, _, _, _, _
-  | _, _, _, .error message, _, _, _, _ | _, _, _, _, .error message, _, _, _ | _, _, _, _, _, .error message, _, _
-  | _, _, _, _, _, _, .error message, _ | _, _, _, _, _, _, _, .error message => fail c message []
-  | .ok attrs, .ok group, .ok cursor, .ok interaction, .ok tooltip, .ok legend, .ok numbers, .ok highlight =>
+      Tooltip.parse tooltipName, Legend.parseStyle legendName, Numbers.parse numbersName, Highlight.parse highlightName, Focus.parse focusName with
+  | .error message, _, _, _, _, _, _, _, _ | _, .error message, _, _, _, _, _, _, _ | _, _, .error message, _, _, _, _, _, _
+  | _, _, _, .error message, _, _, _, _, _ | _, _, _, _, .error message, _, _, _, _ | _, _, _, _, _, .error message, _, _, _
+  | _, _, _, _, _, _, .error message, _, _ | _, _, _, _, _, _, _, .error message, _ | _, _, _, _, _, _, _, _, .error message => fail c message []
+  | .ok attrs, .ok group, .ok cursor, .ok interaction, .ok tooltip, .ok legend, .ok numbers, .ok highlight, .ok focus =>
+    c.focusStyle.set focus
     c.tooltipStyle.set tooltip
     c.highlightOn.set highlight
     c.numberFormat.set numbers
@@ -1135,11 +1158,13 @@ private def recursor (c : Chart) (value : Option String) : IO Unit := do
     applyCursorStyle c style
     invalidate c
 
-/-- A change of `tooltip`, `legend`, `number-format` or `highlight` redraws them without reloading the chart. -/
-private def reprobe (c : Chart) (tooltip legend numbers highlight : Option String) : IO Unit := do
-  match Tooltip.parse tooltip, Legend.parseStyle legend, Numbers.parse numbers, Highlight.parse highlight with
-  | .error message, _, _, _ | _, .error message, _, _ | _, _, .error message, _ | _, _, _, .error message => fail c message []
-  | .ok t, .ok l, .ok n, .ok h =>
+/-- A change of `tooltip`, `legend`, `number-format`, `highlight` or `focus` redraws them without reloading the chart. -/
+private def reprobe (c : Chart) (tooltip legend numbers highlight focus : Option String) : IO Unit := do
+  match Tooltip.parse tooltip, Legend.parseStyle legend, Numbers.parse numbers, Highlight.parse highlight, Focus.parse focus with
+  | .error message, _, _, _, _ | _, .error message, _, _, _ | _, _, .error message, _, _ | _, _, _, .error message, _
+  | _, _, _, _, .error message => fail c message []
+  | .ok t, .ok l, .ok n, .ok h, .ok f =>
+    c.focusStyle.set f
     c.tooltipStyle.set t
     c.highlightOn.set h
     c.numberFormat.set n
@@ -1168,15 +1193,16 @@ private def changed (loader : Loader) (args : Array Data) : Async Unit := do
       | some (.string "interaction") => reinput c (← getAttr c.el "interaction")
       | some (.string "chart-title") => setTitle c (← getAttr c.el "chart-title")
       | some (.string "tooltip") | some (.string "legend") | some (.string "number-format")
-      | some (.string "highlight") =>
+      | some (.string "highlight") | some (.string "focus") =>
         reprobe c (← getAttr c.el "tooltip") (← getAttr c.el "legend") (← getAttr c.el "number-format") (← getAttr c.el "highlight")
+          (← getAttr c.el "focus")
       | _ => load c loader
 
 private def define (tag : String) (loader : Loader) (resizes buttons : Bool) : IO Unit := do
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend", "number-format", "chart-title", "theme", "highlight",
+  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend", "number-format", "chart-title", "theme", "highlight", "focus",
       "axis-title-left", "axis-title-right", "axis-title-top", "axis-title-bottom"]
     (← Function.ofFn (connect loader resizes · *> pure .undefined))
     (← Function.ofSyncFn disconnect)

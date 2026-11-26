@@ -1108,6 +1108,44 @@ test('a clipped draw covers the whole plot at any device pixel ratio', async () 
   }
 });
 
+test('the focus attribute dims the series away from the pointer, and the legend entries with them', async () => {
+  const { page, context } = await open('/focus.html');
+  await drawn(page, 1);
+  const move = y => page.evaluate(y => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: rect.left + 100, clientY: rect.top + y }));
+  }, y);
+  // Series 0 is the bottom band (its point at 100, 140) and series 1 the top (100, 60).
+  const bands = () => page.evaluate(() => {
+    const c = document.getElementById('a').shadowRoot.querySelector('canvas');
+    const px = (x, y) => [...c.getContext('2d').getImageData(x, y, 1, 1).data];
+    return { top: px(300, 50), bottom: px(300, 150) };
+  });
+  const entries = () => page.evaluate(() =>
+    [...document.getElementById('a').shadowRoot.querySelectorAll('.legend button')].map(b => b.style.opacity));
+  const near = (rgba, want, what) => assert.ok(rgba.every((v, i) => Math.abs(v - want[i]) <= 3), `${what}: ${rgba} is not ${want}`);
+  const settled = async y => { const n = await page.evaluate(() => window.draws.length); await move(y); await page.waitForFunction(n => window.draws.length > n, n, { timeout: 3000 }).catch(() => {}); await settle(page); };
+  near((await bands()).top, [0, 0, 255, 255], 'no pointer, top');
+  near((await bands()).bottom, [255, 0, 0, 255], 'no pointer, bottom');
+  await settled(138);
+  let b = await bands();
+  near(b.bottom, [255, 0, 0, 255], 'near series 0, it keeps its colour');
+  near(b.top, [191, 191, 255, 255], 'near series 0, series 1 is drawn at 0.25');
+  assert.deepEqual(await entries(), ['', '0.25']);
+  await settled(62);
+  b = await bands();
+  near(b.top, [0, 0, 255, 255], 'near series 1, it keeps its colour');
+  near(b.bottom, [255, 191, 191, 255], 'near series 1, series 0 is drawn at 0.25');
+  assert.deepEqual(await entries(), ['0.25', '']);
+  await settled(100);
+  b = await bands();
+  near(b.top, [0, 0, 255, 255], 'out of range, top restored');
+  near(b.bottom, [255, 0, 0, 255], 'out of range, bottom restored');
+  assert.deepEqual(await entries(), ['', '']);
+  await context.close();
+});
+
 // Dispatches a wheel event over the plot and reports whether the chart took it (default-prevented).
 const wheelTaken = (page, init = {}) => page.evaluate(init => {
   const el = document.querySelector('inkproof-accessible-chart');

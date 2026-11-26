@@ -3,6 +3,7 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import Inkproof.Web.Host.SceneCache
+import Inkproof.Web.Focus
 import Inkproof.Web.Pixels
 import Inkproof.Web.Series
 
@@ -43,29 +44,51 @@ def Retention.invalidate (r : Retention) : IO Unit := r.cache.invalidate
 def Retention.build {α : Type} (r : Retention) (f : Retained → Bool → IO (Retained × α)) : IO α :=
   r.cache.buildRetained f
 
-/-- Define the element `tag`, and draw each chart `build` makes of its `src` for its canvas's size and the series its legend has hidden. A click on a legend entry hides or shows a series by calling what `build` returned again, and only a change of size calls `build` again. `build` is given the chart's `Retention`, kept for the page's life per `src`. -/
-def registerRetainedAs (tag : String) (build : String → Pixels → Retention → IO (Array Bool → IO Scene)) : IO Unit := do
+/-- Define the element `tag`, and draw each chart `build` makes of its `src` for its canvas's size, the series its legend has hidden and the opacity of each series, which its `focus` attribute lowers for those away from the pointer; a series past the end of the array is opaque. A click on a legend entry or a change of focus draws again by calling what `build` returned, and only a change of size calls `build` again. `build` is given the chart's `Retention`, kept for the page's life per `src`. -/
+def registerFocusedAs (tag : String) (build : String → Pixels → Retention → IO (Array Bool → Array Float → IO Scene)) : IO Unit := do
   let hidden ← IO.mkRef (({} : Std.HashMap String Hidden))
-  let draws ← IO.mkRef (({} : Std.HashMap String ((Array Bool → IO Scene) × Nat)))
+  let alphas ← IO.mkRef (({} : Std.HashMap String (Array Float)))
+  let draws ← IO.mkRef (({} : Std.HashMap String ((Array Bool → Array Float → IO Scene) × Nat)))
   let caches ← IO.mkRef (({} : Std.HashMap String Retention))
   registerCanvas tag fun src px => do
     let cache ← match (← caches.get).get? src with
       | some c => pure c
       | none => do let c ← Retention.new; caches.modify (·.insert src c); pure c
     let draw ← build src px cache
-    let scene ← draw ((← hidden.get).getD src #[])
+    let scene ← draw ((← hidden.get).getD src #[]) ((← alphas.get).getD src #[])
     draws.modify (·.insert src (draw, scene.access.traces.size))
     return scene
+  let source (event : Value) : IO String := do
+    (← event.get "target" Value).callMethod "getAttribute" #[toJS "src"] String
   let toggled ← Function.ofSyncFn fun args => do
     if let some (Data.ref event _) := args[0]? then
       if let some e ← decodeSeriesEvent event then
-        let el ← event.get "target" Value
-        let src ← el.callMethod "getAttribute" #[toJS "src"] String
+        let src ← source event
         if let some (draw, count) := (← draws.get).get? src then
           let off := Hidden.apply count ((← hidden.get).getD src #[]) e
           hidden.modify (·.insert src off)
-          setScene el (← draw off)
+          setScene (← event.get "target" Value) (← draw off ((← alphas.get).getD src #[]))
     return .undefined
-  (← (← global).get "document").callMethod "addEventListener" #[toJS "inkproof-series", toJS toggled] Unit
+  let focused ← Function.ofSyncFn fun args => do
+    if let some (Data.ref event _) := args[0]? then
+      let src ← source event
+      if let some (draw, count) := (← draws.get).get? src then
+        let detail ← event.get "detail" Value
+        let series ← match ← detail.get "series" Data with
+          | .number n => pure (SeriesEvent.decode n false |>.map (·.series))
+          | _ => pure none
+        let next := Focus.alphas count (← detail.get "alpha" Float) series
+        alphas.modify (·.insert src next)
+        setScene (← event.get "target" Value) (← draw ((← hidden.get).getD src #[]) next)
+    return .undefined
+  let doc ← (← global).get "document"
+  doc.callMethod "addEventListener" #[toJS "inkproof-series", toJS toggled] Unit
+  doc.callMethod "addEventListener" #[toJS "inkproof-focus", toJS focused] Unit
+
+/-- Like `registerFocusedAs`, for a chart that does not dim series. -/
+def registerRetainedAs (tag : String) (build : String → Pixels → Retention → IO (Array Bool → IO Scene)) : IO Unit :=
+  registerFocusedAs tag fun src px r => do
+    let draw ← build src px r
+    return fun off _ => draw off
 
 end Inkproof.Web.Host

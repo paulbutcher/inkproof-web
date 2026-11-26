@@ -55,17 +55,19 @@ def axisTitledScene (src : String) (_ _ : Nat × Nat) (_ : Option Inkproof.Scene
   return { scene with labels := ticks.push title.label }
 
 /-- A scene with two series of five points, a view over 0 to 100 (400 pixels across and 200 high), and data for the table. -/
-def accessibleScene (src : String) : Async Scene := do
-  let scene ← fetchScene src
+def accessibleAccess : Access :=
   let axis : Inkproof.Viewport.Interval.Config Float :=
     { length := 400, minSpan := 1, maxSpan := 100, home := ⟨0, 100⟩, keyZoom := 2, keyPan := 0.25 }
-  return { scene with access :=
-    { name := "Sales", series := #["North", "South"], points := 5, view := some ⟨axis, { axis with length := 200 }⟩,
-      header := #["Month", "North", "South"],
-      rows := #[#["Jan", "1", "2"], #["Feb", "3", "4"]],
-      traces := #[
-        { name := "North", color := "#d33", xs := #[0, 25, 50, 75, 100], ys := #[10, 30, 20, 60, 40] },
-        { name := "South", color := "#36c", xs := #[0, 25, 50, 75, 100], ys := #[80, 70, 90, 50, 55] }] } }
+  { name := "Sales", series := #["North", "South"], points := 5, view := some ⟨axis, { axis with length := 200 }⟩,
+    header := #["Month", "North", "South"],
+    rows := #[#["Jan", "1", "2"], #["Feb", "3", "4"]],
+    traces := #[
+      { name := "North", color := "#d33", xs := #[0, 25, 50, 75, 100], ys := #[10, 30, 20, 60, 40] },
+      { name := "South", color := "#36c", xs := #[0, 25, 50, 75, 100], ys := #[80, 70, 90, 50, 55] }] }
+
+def accessibleScene (src : String) : Async Scene := do
+  let scene ← fetchScene src
+  return { scene with access := accessibleAccess }
 
 /-- A scene with no series and two groups of values at x of 10, 20 and 30: a candle's open and close, which the chart lets the legend hide, and a state, which it does not. -/
 def groupedValuesScene (src : String) : Async Scene := do
@@ -133,6 +135,25 @@ def clippedScene (_ : String) (_css backing : Nat × Nat) : Async Scene := do
     ⟨5, [.u32 0, .u32 6, .u32 2]⟩]
   return { commands := ByteArray.mk (encode cmds).toArray }
 
+/-- The accessible scene drawn as two opaque bands over white, the top half in the colour of series 1 and the bottom half of series 0, each mixed with white by the series' opacity in `alphas` (opaque past its end). -/
+def focusScene (backing : Nat × Nat) (alphas : Array Float) : Scene :=
+  let one : UInt32 := 0x3f800000
+  let neg : UInt32 := 0xbf800000
+  let quad : List UInt32 := [neg, neg, one, neg, neg, one, one, neg, one, one, neg, one]
+  let mix (v : Nat) (series : Nat) : UInt32 :=
+    let a := alphas.getD series 1
+    (Float32.ofNat 255 * (1 - a.toFloat32) + Float32.ofNat v * a.toFloat32) / 255 |>.toBits
+  let band (series : Nat) (y : Nat) (rgb : Nat × Nat × Nat) : List Cmd :=
+    [⟨8, [.words [0, y.toUInt32, backing.1.toUInt32, (backing.2 / 2).toUInt32]]⟩,
+     ⟨4, [.u32 4, .words [mix rgb.1 series, mix rgb.2.1 series, mix rgb.2.2 series, one]]⟩,
+     ⟨5, [.u32 0, .u32 6, .u32 2]⟩]
+  let cmds : List Cmd := [⟨8, [.words []]⟩, ⟨6, [.u32 0xffffffff]⟩, ⟨7, [.u32 0]⟩,
+    ⟨0, [.u32 0]⟩, ⟨1, [.u32 0, .words quad]⟩, ⟨3, [.u32 0]⟩,
+    ⟨4, [.u32 0, .words [one, one]]⟩, ⟨4, [.u32 1, .words [0, 0]]⟩, ⟨4, [.u32 2, .words [0]]⟩,
+    ⟨4, [.u32 3, .words [one, one, one, one]]⟩] ++
+    band 1 (backing.2 / 2) (0, 0, 255) ++ band 0 0 (255, 0, 0)
+  { commands := ByteArray.mk (encode cmds).toArray, access := accessibleAccess }
+
 /-- A scene that draws one buffer, uploaded only when the cache does not hold it. -/
 def cachedScene (cache : SceneCache) : IO Scene :=
   cache.build fun c fresh => do
@@ -176,6 +197,7 @@ def main : IO Unit := do
   registerSized "inkproof-sized-chart" sizedScene
   registerThemed "inkproof-themed-chart" themedScene
   registerPixels "inkproof-pixel-chart" clippedScene
+  registerFocusedAs "inkproof-focus-chart" fun _ px _ => pure fun _ alphas => pure (focusScene px.backing alphas)
   let doc ← (← global).get "document"
   if let .ref el _ ← doc.callMethod "querySelector" #[toJS "inkproof-replacing-chart"] Data then
     answerViews el base
