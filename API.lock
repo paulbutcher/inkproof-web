@@ -141,9 +141,11 @@ theorem Inkproof.Web.Highlight.parse_off : Inkproof.Web.Highlight.parse (Option.
 theorem Inkproof.Web.Highlight.parse_on : Inkproof.Web.Highlight.parse (Option.some "on") = Except.ok Bool.true
 structure Inkproof.Web.Interaction : Type
 field Inkproof.Web.Interaction.box : Inkproof.Web.Interaction → Inkproof.Web.BoxConfig
+field Inkproof.Web.Interaction.dblclickReset : Inkproof.Web.Interaction → Bool
 field Inkproof.Web.Interaction.drag : Inkproof.Web.Interaction → Inkproof.Web.DragMode
-constructor Inkproof.Web.Interaction.mk : Inkproof.Web.WheelMode → Inkproof.Web.TouchMode → Inkproof.Web.DragMode → Inkproof.Web.BoxConfig → Inkproof.Web.SelectMode → Inkproof.Web.Interaction
+constructor Inkproof.Web.Interaction.mk : Inkproof.Web.WheelMode → Inkproof.Web.TouchMode → Inkproof.Web.DragMode → Inkproof.Web.BoxConfig → Inkproof.Web.SelectMode → Bool → Inkproof.Web.Interaction
 def Inkproof.Web.Interaction.parse : Option String → Except String Inkproof.Web.Interaction
+theorem Inkproof.Web.Interaction.parse_dblclick : ∃ i, Inkproof.Web.Interaction.parse (Option.some "dblclick-reset") = Except.ok i ∧ i.dblclickReset = Bool.true ∧ Option.map (fun x => x.dblclickReset) (Inkproof.Web.Interaction.parse Option.none).toOption = Option.some Bool.false
 theorem Inkproof.Web.Interaction.parse_drag : ∃ i, Inkproof.Web.Interaction.parse (Option.some "drag-box box-x select-x") = Except.ok i ∧ i.drag = Inkproof.Web.DragMode.box ∧ i.box.axes = Inkproof.Viewport.Gesture.Axes.x ∧ i.select = Inkproof.Web.SelectMode.x
 theorem Inkproof.Web.Interaction.parse_none : ∃ i, Inkproof.Web.Interaction.parse Option.none = Except.ok i ∧ i.wheel = Inkproof.Web.WheelMode.zoom ∧ i.touch = Inkproof.Web.TouchMode.on ∧ i.drag = Inkproof.Web.DragMode.pan ∧ i.select = Inkproof.Web.SelectMode.off ∧ i.box.axes = Inkproof.Viewport.Gesture.Axes.both ∧ i.box.minDistance = Inkproof.Viewport.Gesture.minBox
 theorem Inkproof.Web.Interaction.parse_repeated : ∃ e, Inkproof.Web.Interaction.parse (Option.some "no-drag no-drag") = Except.error e

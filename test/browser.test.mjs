@@ -459,7 +459,7 @@ const gesture = async (page, steps) => {
     for (const [type, init] of steps) {
       const { x, y, ...rest } = init;
       const options = { bubbles: true, cancelable: true, clientX: rect.left + x, clientY: rect.top + y, pointerType: 'touch', isPrimary: true, ...rest };
-      el.dispatchEvent(type === 'wheel' ? new WheelEvent(type, options) : new PointerEvent(type, options));
+      el.dispatchEvent(type === 'wheel' ? new WheelEvent(type, options) : type === 'dblclick' ? new MouseEvent(type, options) : new PointerEvent(type, options));
     }
   }, steps);
 };
@@ -1105,6 +1105,26 @@ test('with wheel="ctrl" only the wheel with Ctrl or Meta held zooms', async () =
   assert.equal(await wheelTaken(page, { ctrlKey: true }), true);
   assert.equal(await wheelTaken(page, { metaKey: true }), true);
   await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200, ctrlKey: true }]]);
+  assert.equal(await zoomed(page), true);
+  await context.close();
+});
+
+test('with dblclick-reset a double click restores the home view and tells the page', async () => {
+  const { page, context } = await open('/dblclickreset.html');
+  await drawn(page, 1);
+  await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200 }]]);
+  assert.equal(await zoomed(page), true);
+  await gesture(page, [['dblclick', { x: 100, y: 100 }]]);
+  const home = await lastView(page);
+  assert.deepEqual([home.xStart, home.xEnd], [0, 100]);
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
+test('without dblclick-reset a double click leaves the view alone', async () => {
+  const { page, context } = await open('/wheelctrl.html');
+  await drawn(page, 1);
+  await gesture(page, [['wheel', { x: 100, y: 100, deltaY: -200, ctrlKey: true }], ['dblclick', { x: 100, y: 100 }]]);
   assert.equal(await zoomed(page), true);
   await context.close();
 });

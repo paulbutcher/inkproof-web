@@ -160,6 +160,7 @@ private structure Chart where
   /-- Which hideable value groups the legend has hidden, by index. -/
   hiddenGroups : IO.Ref (Array Bool)
   selectMode : IO.Ref SelectMode
+  dblclickReset : IO.Ref Bool
   /-- The selected x range, in data coordinates. -/
   band : IO.Ref (Option (Selection.Band Float))
   selectDrag : IO.Ref (Option (Selection.Drag Float))
@@ -455,7 +456,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl, highlightEl, titleEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, highlightOn := ← IO.mkRef false, numberFormat := ← IO.mkRef none, theme := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, highlightOn := ← IO.mkRef false, numberFormat := ← IO.mkRef none, theme := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, dblclickReset := ← IO.mkRef false, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -794,6 +795,12 @@ private def onWheel (c : Chart) (event : Value) : IO Unit := do
   let factor := Gesture.wheelFactor (scale * (← event.get "deltaY" Float))
   applyInputs c [.wheel p.1 p.2 factor]
 
+private def onDblClick (c : Chart) (event : Value) : IO Unit := do
+  unless (← c.dblclickReset.get) && (← c.selectMode.get) == .off do return
+  let some (scene, navConfig, nav) ← navigable c | return
+  unless Gesture.inside navConfig.view (← position c event) do return
+  commit c scene nav (nav.apply navConfig .reset)
+
 /-- The data x position at plot position `p`. -/
 private def dataX (navConfig : NavConfig) (nav : Nav) (p : Px) : Float :=
   let v := Gesture.toView navConfig.view p
@@ -904,6 +911,7 @@ private def applyInteraction (c : Chart) (i : Interaction) : IO Unit := do
   c.dragMode.set i.drag
   c.boxConfig.set i.box
   c.selectMode.set i.select
+  c.dblclickReset.set i.dblclickReset
 
 private def axisTitles (c : Chart) : IO AxisTitles := do
   let attr (name : String) : IO (Option String) := return (← getAttr c.el name).filter (· ≠ "")
@@ -1061,7 +1069,7 @@ private def connect (loader : Loader) (resizes : Bool) (args : Array Data) : Asy
   let c ← build id el
   el.set idKey id
   live.modify (·.insert id c)
-  for (name, handler) in [("keydown", onKey c), ("wheel", onWheel c), ("pointerdown", onPointerDown c),
+  for (name, handler) in [("keydown", onKey c), ("wheel", onWheel c), ("dblclick", onDblClick c), ("pointerdown", onPointerDown c),
       ("pointermove", onPointerMove c), ("pointerleave", onPointerLeave c), ("pointerup", onPointerUp c), ("pointercancel", onPointerUp c)] do
     let listener ← Function.ofSyncFn fun args => do
       if let some (Data.ref event _) := args[0]? then handler event

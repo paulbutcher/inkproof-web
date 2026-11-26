@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.31.0]
+
+- The `dblclick-reset` word of the `interaction` attribute makes a double click on the plot restore the home view (`Interaction.dblclickReset`).
+
 ## [0.30.0]
 
 - `registerRetainedAs` decodes the `inkproof-series` event and keeps each chart's hidden series (`SeriesEvent`, `Hidden.apply`), so a page writes no listener.
