@@ -8,16 +8,30 @@ namespace Inkproof.Web
 
 open Inkproof.Viewport
 
-/-- How a shift-drag box zooms: the axes it covers and the least drag, in pixels, that counts as a selection. -/
+/-- How a shift-drag box zooms: the axes it covers, the least drag, in pixels, that counts as a selection, and for `auto` axes the distance under which both sides of the drag are covered. -/
 structure BoxConfig where
   axes : Gesture.Axes := .both
   minDistance : Float := Gesture.minBox
+  uni : Option Float := none
 
 namespace BoxConfig
 
+/-- The axes a drag of `dx` by `dy` pixels covers: with a `uni` distance, both when each side is under it, else the axes the configuration names. -/
+def axesFor (c : BoxConfig) (dx dy : Float) : Gesture.Axes :=
+  match c.uni with
+  | some d => if dx < d && dy < d then .both else c.axes
+  | none => c.axes
+
+theorem axesFor_none (c : BoxConfig) (dx dy : Float) (h : c.uni = none) : c.axesFor dx dy = c.axes := by
+  simp [axesFor, h]
+
+theorem axesFor_small (c : BoxConfig) (d dx dy : Float) (h : c.uni = some d) (hx : dx < d) (hy : dy < d) :
+    c.axesFor dx dy = .both := by
+  simp [axesFor, h, hx, hy]
+
 /-- The box zoom for a drag between two positions on the plot. -/
 def input (c : BoxConfig) (v : ViewConfig Float) (a b : Px) : Option (Input Float) :=
-  Gesture.boxOver v c.axes c.minDistance a b
+  Gesture.boxOver v (c.axesFor (b.1 - a.1).abs (b.2 - a.2).abs) c.minDistance a b
 
 theorem input_default (v : ViewConfig Float) (a b : Px) :
     ({} : BoxConfig).input v a b = Gesture.box v a b :=

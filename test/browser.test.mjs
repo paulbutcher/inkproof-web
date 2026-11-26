@@ -532,6 +532,19 @@ test('a box zoom set to x changes only x, and a drag shorter than box-min change
   await context.close();
 });
 
+test('box-auto-uni zooms both axes for a small drag and only the longer one for a long thin drag', async () => {
+  const { page, context } = await open('/boxuni.html');
+  await drawn(page, 1);
+  await gesture(page, [['pointerdown', { x: 100, y: 50, pointerId: 1, shiftKey: true }], ['pointerup', { x: 130, y: 80, pointerId: 1 }]]);
+  const square = await lastView(page);
+  assert.ok(square.xEnd - square.xStart < 100 && square.yEnd - square.yStart < 100, 'a small square drag zooms both axes');
+  await gesture(page, [['pointerdown', { x: 100, y: 50, pointerId: 1, shiftKey: true }], ['pointerup', { x: 200, y: 70, pointerId: 1 }]]);
+  const thin = await lastView(page);
+  assert.ok(Math.abs((thin.xEnd - thin.xStart) - (square.xEnd - square.xStart) / 4) < 1e-6, 'a long thin drag zooms x');
+  assert.ok(Math.abs(thin.yStart - square.yStart) < 1e-6 && Math.abs(thin.yEnd - square.yEnd) < 1e-6, 'y keeps its range');
+  await context.close();
+});
+
 test('with drag=box a plain drag zooms to the box and shift-drag pans', async () => {
   const { page, context } = await open('/dragbox.html');
   await drawn(page, 1);

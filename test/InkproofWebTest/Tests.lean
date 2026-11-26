@@ -173,7 +173,11 @@ def facetSizeCase : TestCase :=
     let box := match Interaction.parse (some "drag-box 12px box-y") with
       | .ok i => i.box.minDistance == 12 && (match i.box.axes with | .y => true | _ => false) && i.drag == .box
       | .error _ => false
-    check (marker && box) s!"marker {marker} box {box}"
+    let uni := match Interaction.parse (some "box-auto-uni-50px") with
+      | .ok i => i.box.uni == some 50 && (match i.box.axes with | .auto => true | _ => false)
+      | .error _ => false
+    let clash := match Interaction.parse (some "box-x box-auto-uni-50px") with | .error _ => true | .ok _ => false
+    check (marker && box && uni && clash) s!"marker {marker} box {box} uni {uni} clash {clash}"
 
 def cursorErrorCase : TestCase :=
   .mk "conflicting, unknown and zero cursor words are reported" do

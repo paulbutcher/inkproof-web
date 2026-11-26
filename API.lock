@@ -17,10 +17,14 @@ field Inkproof.Web.Access.traces : Inkproof.Web.Access → Array Inkproof.Web.Tr
 field Inkproof.Web.Access.view : Inkproof.Web.Access → Option (Inkproof.Viewport.ViewConfig Float)
 structure Inkproof.Web.BoxConfig : Type
 field Inkproof.Web.BoxConfig.axes : Inkproof.Web.BoxConfig → Inkproof.Viewport.Gesture.Axes
+def Inkproof.Web.BoxConfig.axesFor : Inkproof.Web.BoxConfig → Float → Float → Inkproof.Viewport.Gesture.Axes
+theorem Inkproof.Web.BoxConfig.axesFor_none : ∀ (c : Inkproof.Web.BoxConfig) (dx dy : Float), c.uni = Option.none → c.axesFor dx dy = c.axes
+theorem Inkproof.Web.BoxConfig.axesFor_small : ∀ (c : Inkproof.Web.BoxConfig) (d dx dy : Float), c.uni = Option.some d → dx < d → dy < d → c.axesFor dx dy = Inkproof.Viewport.Gesture.Axes.both
 def Inkproof.Web.BoxConfig.input : Inkproof.Web.BoxConfig → Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.Px → Inkproof.Viewport.Px → Option (Inkproof.Viewport.Input Float)
 theorem Inkproof.Web.BoxConfig.input_default : ∀ (v : Inkproof.Viewport.ViewConfig Float) (a b : Inkproof.Viewport.Px), { }.input v a b = Inkproof.Viewport.Gesture.box v a b
 field Inkproof.Web.BoxConfig.minDistance : Inkproof.Web.BoxConfig → Float
-constructor Inkproof.Web.BoxConfig.mk : Inkproof.Viewport.Gesture.Axes → Float → Inkproof.Web.BoxConfig
+constructor Inkproof.Web.BoxConfig.mk : Inkproof.Viewport.Gesture.Axes → Float → Option Float → Inkproof.Web.BoxConfig
+field Inkproof.Web.BoxConfig.uni : Inkproof.Web.BoxConfig → Option Float
 structure Inkproof.Web.Candidate : Type
 constructor Inkproof.Web.Candidate.mk : Nat → Nat → Float → Float → Inkproof.Web.Candidate
 field Inkproof.Web.Candidate.point : Inkproof.Web.Candidate → Nat
