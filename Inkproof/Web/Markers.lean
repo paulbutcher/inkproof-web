@@ -43,7 +43,7 @@ def position (config : ViewConfig Float) (view : View Float) (t : Trace) (x : Fl
   (t.nearestPoint x).bind fun (px, py) =>
     if py.isNaN then none else
       let sx := view.x.toScreen config.x px
-      let sy := config.y.length - view.y.toScreen config.y py
+      let sy := config.y.length - view.y.toScreen config.y (t.leftY py)
       if 0 ≤ sx && sx ≤ config.x.length && 0 ≤ sy && sy ≤ config.y.length then some (sx, sy) else none
 
 theorem position_eq (config : ViewConfig Float) (view : View Float) (t : Trace) (x px py : Float)
@@ -51,9 +51,9 @@ theorem position_eq (config : ViewConfig Float) (view : View Float) (t : Trace) 
     position config view t x =
       if py.isNaN then none else
         if 0 ≤ view.x.toScreen config.x px && view.x.toScreen config.x px ≤ config.x.length &&
-            0 ≤ config.y.length - view.y.toScreen config.y py &&
-            config.y.length - view.y.toScreen config.y py ≤ config.y.length then
-          some (view.x.toScreen config.x px, config.y.length - view.y.toScreen config.y py)
+            0 ≤ config.y.length - view.y.toScreen config.y (t.leftY py) &&
+            config.y.length - view.y.toScreen config.y (t.leftY py) ≤ config.y.length then
+          some (view.x.toScreen config.x px, config.y.length - view.y.toScreen config.y (t.leftY py))
         else none := by
   simp [position, hn]
 

@@ -3,11 +3,12 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import Inkproof.Float.OrdFloat
+import Inkproof.Scale
 import Inkproof.Viewport.View
 
 namespace Inkproof.Web
 
-open Inkproof.Float Inkproof.Viewport
+open Inkproof.Float Inkproof.Scale Inkproof.Viewport
 
 /-- One series as the tooltip and legend read it: its points, in data coordinates. -/
 structure Trace where
@@ -22,14 +23,21 @@ structure Trace where
   sizes : Array Float := #[]
   /-- A text for each point, which the tooltip names with the series; empty for a series without them. -/
   labels : Array String := #[]
+  /-- The series' y values are on an axis of their own: its slope and offset take a value `y` to `slope * y + offset` in the first y axis's coordinates, where the series is drawn and its points are found. -/
+  toLeft : Affine Float := ⟨1, 0⟩
 
 namespace Trace
+
+/-- A y value of the series in the first y axis's coordinates. -/
+def leftY (t : Trace) (y : Float) : Float := t.toLeft.apply y
+
+theorem leftY_eq (t : Trace) (y : Float) : t.leftY y = t.toLeft.slope * y + t.toLeft.offset := rfl
 
 /-- The trace with its points in pixels from the plot's top left under `view`, y upwards on the screen. -/
 def onScreen (config : ViewConfig Float) (view : View Float) (t : Trace) : Trace :=
   { t with
     xs := t.xs.map (view.x.toScreen config.x)
-    ys := t.ys.map fun y => config.y.length - view.y.toScreen config.y y }
+    ys := t.ys.map fun y => config.y.length - view.y.toScreen config.y (t.leftY y) }
 
 theorem onScreen_size (config : ViewConfig Float) (view : View Float) (t : Trace) :
     (t.onScreen config view).xs.size = t.xs.size ∧ (t.onScreen config view).ys.size = t.ys.size := by
@@ -39,7 +47,7 @@ theorem onScreen_xs (config : ViewConfig Float) (view : View Float) (t : Trace) 
     (t.onScreen config view).xs = t.xs.map (view.x.toScreen config.x) := rfl
 
 theorem onScreen_ys (config : ViewConfig Float) (view : View Float) (t : Trace) :
-    (t.onScreen config view).ys = t.ys.map fun y => config.y.length - view.y.toScreen config.y y := rfl
+    (t.onScreen config view).ys = t.ys.map fun y => config.y.length - view.y.toScreen config.y (t.leftY y) := rfl
 
 end Trace
 

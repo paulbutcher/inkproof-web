@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.29.0]
+
+- A `Trace` can name the map from its own y values to the first y axis's coordinates (`toLeft`), so a series on a second y axis is found and marked where it is drawn and the tooltip gives its own y.
+
 ## [0.28.1]
 
 - The `axis-title-left`, `-right`, `-top` and `-bottom` attributes give an axis's title text to a loader registered with `registerTitled`, which places it with `axisTitleMeasured`.

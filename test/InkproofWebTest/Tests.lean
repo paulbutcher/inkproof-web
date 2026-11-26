@@ -127,6 +127,17 @@ def markerNearestCase : TestCase :=
     let near (y : Option Float) := (Markers.atCursor .nearest {} markerConfig view ts 25 y).map (·.series)
     check (near (some 65) == #[1] && near (some 35) == #[0] && near none == #[0]) s!"{near (some 65)} {near (some 35)} {near none}"
 
+/-- A series on its own y axis is found where it is drawn, and the tooltip gives its own y. -/
+def secondAxisCase : TestCase :=
+  .mk "a series on a second y axis is placed through its map to the first" do
+    let view := Inkproof.Viewport.View.home markerConfig
+    let t : Trace := { name := "R", color := "#36c", xs := #[25], ys := #[5], toLeft := ⟨10, 0⟩ }
+    let plain : Trace := { t with toLeft := ⟨1, 0⟩, ys := #[50] }
+    let a := (t.onScreen markerConfig view).ys
+    let b := (plain.onScreen markerConfig view).ys
+    check (a == b) s!"{a} {b}"
+    check ((Tooltip.single none true #[t] ⟨0, 0, 25, 5⟩).getD "" == "R: 25, 5") "tooltip y"
+
 /-- Bubbles as traces with sizes and labels: for any pointer, the tooltip names the visible bubble nearest its centre, with its label and size. -/
 def bubbleCase : TestCase :=
   .mk "the tooltip names the visible bubble nearest the pointer" do
@@ -210,6 +221,6 @@ def tooltipParseCase : TestCase :=
     check (bad "shared xy" && bad "x xy" && bad "top-left top-right" && bad "12 13" && bad "wide" && offset) "tooltip words"
 
 def tests : List TestCase :=
-  [bubbleCase, markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase, numberFormatCase, showFloatCase]
+  [secondAxisCase, bubbleCase, markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase, numberFormatCase, showFloatCase]
 
 end InkproofWebTest
