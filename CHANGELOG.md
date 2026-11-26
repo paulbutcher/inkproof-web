@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.31.1]
+
+- A band of a `select-x` chart shows a grip at each edge; dragging a grip resizes the band and dragging inside it moves it.
+
 ## [0.31.0]
 
 - The `dblclick-reset` word of the `interaction` attribute makes a double click on the plot restore the home view (`Interaction.dblclickReset`).

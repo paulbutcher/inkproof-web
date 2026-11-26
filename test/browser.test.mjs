@@ -730,6 +730,32 @@ test('a drag on a selecting chart draws a band that the others in its group show
   await context.close();
 });
 
+test('dragging a grip at an edge of the band resizes it and reports the new range', async () => {
+  const { page, context } = await open('/select.html');
+  await drawn(page, 2);
+  await page.evaluate(() => {
+    window.selected = [];
+    document.getElementById('a').addEventListener('inkproof-select', e => window.selected.push(e.detail));
+  });
+  const point = (type, x) => page.evaluate(([type, x]) => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent(type, { pointerId: 1, clientX: rect.left + x, clientY: rect.top + 100 }));
+  }, [type, x]);
+  for (const [type, x] of [['pointerdown', 150], ['pointermove', 250], ['pointerup', 250]]) await point(type, x);
+  const band = (await page.evaluate(() => window.selected)).at(-1);
+  for (const [type, x] of [['pointerdown', 152], ['pointermove', 120], ['pointerup', 120]]) await point(type, x);
+  const grown = (await page.evaluate(() => window.selected)).at(-1);
+  assert.ok(grown.xStart < band.xStart, 'the left edge moved out');
+  assert.equal(grown.xEnd, band.xEnd, 'the right edge stayed');
+  for (const [type, x] of [['pointerdown', 248], ['pointermove', 200], ['pointerup', 200]]) await point(type, x);
+  const shrunk = (await page.evaluate(() => window.selected)).at(-1);
+  assert.equal(shrunk.xStart, grown.xStart, 'the left edge stayed');
+  assert.ok(shrunk.xEnd < grown.xEnd, 'the right edge moved in');
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
 test('buttons reset and unlink charts with no page script, and the page decodes the events', async () => {
   const { page, context } = await open('/buttons.html');
   await drawn(page, 2);

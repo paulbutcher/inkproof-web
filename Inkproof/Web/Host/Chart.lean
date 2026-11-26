@@ -304,6 +304,9 @@ private def draw (c : Chart) : IO Unit := do
     c.ctx.set "strokeStyle" "rgba(0, 100, 255, 0.8)"
     c.ctx.set "lineWidth" 1
     c.ctx.callMethod "strokeRect" #[toJS (origin.1 + left), toJS origin.2, toJS (right - left), toJS config.y.length] Unit
+    c.ctx.set "fillStyle" "rgba(0, 100, 255, 0.8)"
+    for edge in #[left, right] do
+      c.ctx.callMethod "fillRect" #[toJS (origin.1 + edge - 3), toJS (origin.2 + config.y.length / 2 - 12), toJS (6 : Float), toJS (24 : Float)] Unit
   if let (some (x, y), some config) := (← c.cursor.get, scene.access.view) then
     let view := ((← c.nav.get).map (·.view)).getD (View.home config)
     c.ctx.set "strokeStyle" "rgba(0, 0, 0, 0.5)"
