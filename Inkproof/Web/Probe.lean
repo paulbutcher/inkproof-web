@@ -18,6 +18,10 @@ structure Trace where
   hidden : Bool := false
   /-- Whether the series is drawn with hollow markers, which a cursor marker then fills. -/
   hollow : Bool := false
+  /-- A size for each point, such as a bubble's value, which the tooltip names; empty for a series without them. -/
+  sizes : Array Float := #[]
+  /-- A text for each point, which the tooltip names with the series; empty for a series without them. -/
+  labels : Array String := #[]
 
 namespace Trace
 

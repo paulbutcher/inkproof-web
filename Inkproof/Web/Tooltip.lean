@@ -115,18 +115,33 @@ theorem Style.place_eq (s : Style) (x y w h width height : Float) :
        if s.top then fit (y - s.offset.toFloat) (y + s.offset.toFloat - h) h height
        else fit (y + s.offset.toFloat - h) (y - s.offset.toFloat) h height) := rfl
 
-/-- What a tooltip at `c` reads: the series, the point's x unless left out, and its y. -/
+/-- What a tooltip at `c` reads: the series, with the point's label if it has one, then the point's x unless left out, its y and its size if it has one. -/
 def single (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Trace) (c : Candidate) : Option String := do
   let t ← traces[c.series]?
   let x ← t.xs[c.point]?
   let y ← t.ys[c.point]?
-  some (if showX then s!"{t.name}: {showNumber fmt x}, {showNumber fmt y}" else s!"{t.name}: {showNumber fmt y}")
+  let name := match t.labels[c.point]? with
+    | some l => s!"{t.name}, {l}"
+    | none => t.name
+  let values := (if showX then [showNumber fmt x] else []) ++ [showNumber fmt y] ++
+    ((t.sizes[c.point]?).map (showNumber fmt)).toList
+  some (name ++ ": " ++ ", ".intercalate values)
 
 theorem single_eq (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Trace) (c : Candidate) (t : Trace) (x y : Float)
     (ht : traces[c.series]? = some t) (hx : t.xs[c.point]? = some x) (hy : t.ys[c.point]? = some y) :
     single fmt showX traces c =
-      some (if showX then s!"{t.name}: {showNumber fmt x}, {showNumber fmt y}" else s!"{t.name}: {showNumber fmt y}") := by
+      some ((match t.labels[c.point]? with | some l => s!"{t.name}, {l}" | none => t.name) ++ ": " ++
+        ", ".intercalate ((if showX then [showNumber fmt x] else []) ++ [showNumber fmt y] ++
+          ((t.sizes[c.point]?).map (showNumber fmt)).toList)) := by
   simp [single, ht, hx, hy]
+
+/-- Without labels or sizes the tooltip reads as it always did: the series, then the x unless left out, and the y. -/
+theorem single_plain (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Trace) (c : Candidate) (t : Trace) (x y : Float)
+    (ht : traces[c.series]? = some t) (hx : t.xs[c.point]? = some x) (hy : t.ys[c.point]? = some y)
+    (hl : t.labels[c.point]? = none) (hs : t.sizes[c.point]? = none) :
+    single fmt showX traces c =
+      some (if showX then s!"{t.name}: {showNumber fmt x}, {showNumber fmt y}" else s!"{t.name}: {showNumber fmt y}") := by
+  cases showX <;> simp [single, ht, hx, hy, hl, hs, String.append_assoc] <;> rfl
 
 /-- What a shared tooltip at the cursor's x reads: the x unless left out, then a line for each visible series with its value there. None when no series is visible. -/
 def sharedText (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Trace) (x : Float) : Option String :=

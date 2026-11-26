@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.28.0]
+
+- A `Trace` can carry a size and a label for each point (`sizes`, `labels`), so the tooltip names the nearest bubble's label and values; the application draws the bubbles with Scene.
+
 ## [0.27.1]
 
 - `axisTitle` and `axisTitleMeasured` place an axis title `axisTitleGap` (8 pixels) beyond the widest tick label, turned on a left or right axis, with the margin the plot must reserve for it.

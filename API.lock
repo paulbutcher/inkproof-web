@@ -458,7 +458,8 @@ def Inkproof.Web.Tooltip.sharedText : Option Inkproof.Axis.NumberFormat → Bool
 theorem Inkproof.Web.Tooltip.sharedText_eq : ∀ (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Inkproof.Web.Trace) (x : Float), (Array.filter (fun x => !x.hidden) (Inkproof.Web.Legend.rows traces (Option.some x))).isEmpty = Bool.false → Inkproof.Web.Tooltip.sharedText fmt showX traces x = Option.some ("\n".intercalate ((if showX = Bool.true then [ToString.toString "x: " ++ ToString.toString (Inkproof.Web.showNumber fmt x)] else []) ++ (Array.map (Inkproof.Web.Legend.text fmt) (Array.filter (fun x => !x.hidden) (Inkproof.Web.Legend.rows traces (Option.some x)))).toList))
 theorem Inkproof.Web.Tooltip.sharedText_none_of_hidden : ∀ (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Inkproof.Web.Trace) (x : Float), (∀ (t : Inkproof.Web.Trace), t ∈ traces → t.hidden = Bool.true) → Inkproof.Web.Tooltip.sharedText fmt showX traces x = Option.none
 def Inkproof.Web.Tooltip.single : Option Inkproof.Axis.NumberFormat → Bool → Array Inkproof.Web.Trace → Inkproof.Web.Candidate → Option String
-theorem Inkproof.Web.Tooltip.single_eq : ∀ (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Inkproof.Web.Trace) (c : Inkproof.Web.Candidate) (t : Inkproof.Web.Trace) (x y : Float), traces[c.series]? = Option.some t → t.xs[c.point]? = Option.some x → t.ys[c.point]? = Option.some y → Inkproof.Web.Tooltip.single fmt showX traces c = Option.some (if showX = Bool.true then ToString.toString t.name ++ ToString.toString ": " ++ ToString.toString (Inkproof.Web.showNumber fmt x) ++ ToString.toString ", " ++ ToString.toString (Inkproof.Web.showNumber fmt y) else ToString.toString t.name ++ ToString.toString ": " ++ ToString.toString (Inkproof.Web.showNumber fmt y))
+theorem Inkproof.Web.Tooltip.single_eq : ∀ (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Inkproof.Web.Trace) (c : Inkproof.Web.Candidate) (t : Inkproof.Web.Trace) (x y : Float), traces[c.series]? = Option.some t → t.xs[c.point]? = Option.some x → t.ys[c.point]? = Option.some y → Inkproof.Web.Tooltip.single fmt showX traces c = Option.some ((match t.labels[c.point]? with | Option.some l => ToString.toString t.name ++ ToString.toString ", " ++ ToString.toString l | Option.none => t.name) ++ ": " ++ ", ".intercalate ((if showX = Bool.true then [Inkproof.Web.showNumber fmt x] else []) ++ [Inkproof.Web.showNumber fmt y] ++ (Option.map (Inkproof.Web.showNumber fmt) t.sizes[c.point]?).toList))
+theorem Inkproof.Web.Tooltip.single_plain : ∀ (fmt : Option Inkproof.Axis.NumberFormat) (showX : Bool) (traces : Array Inkproof.Web.Trace) (c : Inkproof.Web.Candidate) (t : Inkproof.Web.Trace) (x y : Float), traces[c.series]? = Option.some t → t.xs[c.point]? = Option.some x → t.ys[c.point]? = Option.some y → t.labels[c.point]? = Option.none → t.sizes[c.point]? = Option.none → Inkproof.Web.Tooltip.single fmt showX traces c = Option.some (if showX = Bool.true then ToString.toString t.name ++ ToString.toString ": " ++ ToString.toString (Inkproof.Web.showNumber fmt x) ++ ToString.toString ", " ++ ToString.toString (Inkproof.Web.showNumber fmt y) else ToString.toString t.name ++ ToString.toString ": " ++ ToString.toString (Inkproof.Web.showNumber fmt y))
 inductive Inkproof.Web.TouchAction : Type
 constructor Inkproof.Web.TouchAction.auto : Inkproof.Web.TouchAction
 def Inkproof.Web.TouchAction.css : Inkproof.Web.TouchAction → String
@@ -486,10 +487,11 @@ structure Inkproof.Web.Trace : Type
 field Inkproof.Web.Trace.color : Inkproof.Web.Trace → String
 field Inkproof.Web.Trace.hidden : Inkproof.Web.Trace → Bool
 field Inkproof.Web.Trace.hollow : Inkproof.Web.Trace → Bool
+field Inkproof.Web.Trace.labels : Inkproof.Web.Trace → Array String
 def Inkproof.Web.Trace.lastValue : Inkproof.Web.Trace → Option Float
 theorem Inkproof.Web.Trace.lastValue_eq : ∀ (t : Inkproof.Web.Trace), t.lastValue = t.ys.back?.bind fun y => if y.isNaN = Bool.true then Option.none else Option.some y
 theorem Inkproof.Web.Trace.lastValue_not_nan : ∀ (t : Inkproof.Web.Trace) (v : Float), t.lastValue = Option.some v → v.isNaN = Bool.false
-constructor Inkproof.Web.Trace.mk : String → String → Array Float → Array Float → Bool → Bool → Inkproof.Web.Trace
+constructor Inkproof.Web.Trace.mk : String → String → Array Float → Array Float → Bool → Bool → Array Float → Array String → Inkproof.Web.Trace
 field Inkproof.Web.Trace.name : Inkproof.Web.Trace → String
 def Inkproof.Web.Trace.nearestPoint : Inkproof.Web.Trace → Float → Option (Float × Float)
 theorem Inkproof.Web.Trace.nearestPoint_eq : ∀ (t : Inkproof.Web.Trace) (x : Float), t.nearestPoint x = Inkproof.Web.nearestBy (t.xs.zip t.ys) x
@@ -499,6 +501,7 @@ def Inkproof.Web.Trace.onScreen : Inkproof.Viewport.ViewConfig Float → Inkproo
 theorem Inkproof.Web.Trace.onScreen_size : ∀ (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (t : Inkproof.Web.Trace), (Inkproof.Web.Trace.onScreen config view t).xs.size = t.xs.size ∧ (Inkproof.Web.Trace.onScreen config view t).ys.size = t.ys.size
 theorem Inkproof.Web.Trace.onScreen_xs : ∀ (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (t : Inkproof.Web.Trace), (Inkproof.Web.Trace.onScreen config view t).xs = Array.map (Inkproof.Viewport.Interval.toScreen config.x view.x) t.xs
 theorem Inkproof.Web.Trace.onScreen_ys : ∀ (config : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (t : Inkproof.Web.Trace), (Inkproof.Web.Trace.onScreen config view t).ys = Array.map (fun y => config.y.length - Inkproof.Viewport.Interval.toScreen config.y view.y y) t.ys
+field Inkproof.Web.Trace.sizes : Inkproof.Web.Trace → Array Float
 def Inkproof.Web.Trace.valueAt : Inkproof.Web.Trace → Float → Option Float
 theorem Inkproof.Web.Trace.valueAt_eq : ∀ (t : Inkproof.Web.Trace) (x : Float), t.valueAt x = (t.nearestPoint x).bind fun p => if p.snd.isNaN = Bool.true then Option.none else Option.some p.snd
 theorem Inkproof.Web.Trace.valueAt_not_nan : ∀ (t : Inkproof.Web.Trace) (x v : Float), t.valueAt x = Option.some v → v.isNaN = Bool.false

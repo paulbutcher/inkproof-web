@@ -127,6 +127,33 @@ def markerNearestCase : TestCase :=
     let near (y : Option Float) := (Markers.atCursor .nearest {} markerConfig view ts 25 y).map (·.series)
     check (near (some 65) == #[1] && near (some 35) == #[0] && near none == #[0]) s!"{near (some 65)} {near (some 35)} {near none}"
 
+/-- Bubbles as traces with sizes and labels: for any pointer, the tooltip names the visible bubble nearest its centre, with its label and size. -/
+def bubbleCase : TestCase :=
+  .mk "the tooltip names the visible bubble nearest the pointer" do
+    let ts : Array Trace := #[
+      { name := "A", color := "#d33", xs := #[10, 40, 70], ys := #[20, 80, 50], sizes := #[1, 2, 3], labels := #["p", "q", "r"] },
+      { name := "B", color := "#36c", xs := #[15, 55], ys := #[25, 45], sizes := #[4, 5], labels := #["s", "t"] },
+      { name := "C", color := "#3a3", xs := #[12], ys := #[22], sizes := #[9], labels := #["hidden"], hidden := true }]
+    forAll 200 (fun g =>
+        let (x, g) := g.below 100
+        let (y, g) := g.below 100
+        ((x.toFloat, y.toFloat), g))
+      fun (px, py) =>
+        match Nearest.find .plane ts px py with
+        | none => check false "no bubble found"
+        | some hit =>
+          let d (c : Candidate) := Metric.dist .plane px py c
+          let least := (Nearest.candidates ts).all fun c => d hit ≤ d c
+          let text := (Tooltip.single none true ts hit).getD ""
+          match ts[hit.series]? with
+          | none => check false "no series"
+          | some t =>
+            match t.labels[hit.point]?, t.sizes[hit.point]? with
+            | some l, some z =>
+              check (least && !(hit.series == 2) && text.startsWith s!"{t.name}, {l}: " &&
+                text.endsWith (showFloat z)) s!"{px} {py} {text}"
+            | _, _ => check false "no label or size"
+
 def facetSizeCase : TestCase :=
   .mk "pixel words set the marker size and the least box drag" do
     let marker := match CursorStyle.parse (some "markers 10px outline") with
@@ -183,6 +210,6 @@ def tooltipParseCase : TestCase :=
     check (bad "shared xy" && bad "x xy" && bad "top-left top-right" && bad "12 13" && bad "wide" && offset) "tooltip words"
 
 def tests : List TestCase :=
-  [markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase, numberFormatCase, showFloatCase]
+  [bubbleCase, markerCase, markerHollowCase, markerNearestCase, cursorErrorCase, tooltipPlaceCase, tooltipParseCase, legendWordsCase, sizingCase, cacheCase, unmeasuredCase, logCase, attrCase, interactionErrorCase, facetSizeCase, legendGapCase, numberFormatCase, showFloatCase]
 
 end InkproofWebTest
