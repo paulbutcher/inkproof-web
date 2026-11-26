@@ -277,6 +277,31 @@ test('labels are aligned on their anchor and turned about it', async () => {
   await context.close();
 });
 
+test('an axis title sits a gap beyond the widest tick label, turned, and centred on the plot edge', async () => {
+  const { page, context } = await open('/axistitle.html');
+  await drawn(page, 2);
+  const [titled, bare] = await page.evaluate(() => ['titled', 'bare'].map(id => {
+    const c = document.getElementById(id).shadowRoot.querySelector('canvas');
+    const k = c.width / 400;
+    const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    const dark = [];
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+      const i = (y * c.width + x) * 4;
+      if (data[i + 3] > 0 && data[i] < 90 && data[i + 1] < 90 && data[i + 2] < 90) dark.push([x / k, y / k]);
+    }
+    return dark;
+  }));
+  const labelsLeft = Math.min(...bare.map(p => p[0]));
+  const title = titled.filter(p => p[0] < labelsLeft - 1);
+  const box = { x0: Math.min(...title.map(p => p[0])), x1: Math.max(...title.map(p => p[0])), y0: Math.min(...title.map(p => p[1])), y1: Math.max(...title.map(p => p[1])) };
+  const gap = labelsLeft - box.x1;
+  assert.ok(gap >= 7.5 && gap <= 14, `the title is ${gap}px from the widest tick label`);
+  assert.ok(box.y1 - box.y0 > 2 * (box.x1 - box.x0), 'the title is not turned');
+  assert.ok(Math.abs((box.y0 + box.y1) / 2 - 85) <= 2, 'the title is not centred on the plot edge');
+  assert.ok(titled.filter(p => p[0] >= labelsLeft - 1).length === bare.length, 'the title disturbed the tick labels');
+  await context.close();
+});
+
 test('a label with a second line draws both lines under the same anchor', async () => {
   const { page, context } = await open('/second.html');
   await drawn(page, 1);

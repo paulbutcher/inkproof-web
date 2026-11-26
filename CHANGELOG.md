@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.27.1]
+
+- `axisTitle` and `axisTitleMeasured` place an axis title `axisTitleGap` (8 pixels) beyond the widest tick label, turned on a left or right axis, with the margin the plot must reserve for it.
+
 ## [0.27.0]
 
 - The `highlight` attribute fills the item under the pointer and shows its description as a tooltip; the application gives the items in `Access.items`.

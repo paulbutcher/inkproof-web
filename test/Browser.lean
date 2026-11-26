@@ -42,6 +42,18 @@ def secondLineScene (src : String) : Async Scene := do
     { text, second := some "second line", x := 100, y := 60, align := .center, baseline := .top },
     { text, x := 300, y := 60, align := .center, baseline := .top }] }
 
+/-- A plot at x 100 to 350 and y 20 to 150 with tick labels of two widths on its left axis, and, unless `src` ends in `?bare`, the axis's title. -/
+def axisTitledScene (src : String) : Async Scene := do
+  let bare := src.endsWith "?bare"
+  let scene ← fetchScene (if bare then (src.dropEnd 5).toString else src)
+  let r : Inkproof.Scene.Rect := ⟨100, 20, 350, 150⟩
+  let labels : List Inkproof.Scene.PlacedLabel :=
+    [⟨"5", ⟨94, 120⟩, .horizontal, {}, none⟩, ⟨"1000", ⟨94, 50⟩, .horizontal, {}, none⟩]
+  let ticks := Label.ofDrawing .left ⟨#[], labels⟩
+  if bare then return { scene with labels := ticks }
+  let title ← axisTitleMeasured .left r {} ⟨#[], labels⟩ "Value"
+  return { scene with labels := ticks.push title.label }
+
 /-- A scene with two series of five points, a view over 0 to 100 (400 pixels across and 200 high), and data for the table. -/
 def accessibleScene (src : String) : Async Scene := do
   let scene ← fetchScene src
@@ -159,6 +171,7 @@ def main : IO Unit := do
   register "inkproof-chart"
   register "inkproof-labelled-chart" labelledScene
   register "inkproof-turned-chart" turnedScene
+  register "inkproof-axis-title-chart" axisTitledScene
   register "inkproof-second-chart" secondLineScene
   registerSized "inkproof-sized-chart" sizedScene
   registerThemed "inkproof-themed-chart" themedScene
