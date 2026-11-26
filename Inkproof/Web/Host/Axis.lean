@@ -182,6 +182,18 @@ theorem PlacedLabel.reach_diagonal (side : Side) (r : Rect) (measure : String â†
   unfold PlacedLabel.reach
   simp [h, rot]
 
+/-- The title for the `side` axis. -/
+def AxisTitles.get (t : AxisTitles) : Side â†’ Option String
+  | .left => t.left
+  | .right => t.right
+  | .top => t.top
+  | .bottom => t.bottom
+
+theorem AxisTitles.get_left (t : AxisTitles) : t.get .left = t.left := rfl
+theorem AxisTitles.get_right (t : AxisTitles) : t.get .right = t.right := rfl
+theorem AxisTitles.get_top (t : AxisTitles) : t.get .top = t.top := rfl
+theorem AxisTitles.get_bottom (t : AxisTitles) : t.get .bottom = t.bottom := rfl
+
 /-- The title of an axis and how far it reaches past the plot's edge. -/
 structure AxisTitle where
   label : Label

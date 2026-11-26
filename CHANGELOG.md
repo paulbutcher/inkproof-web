@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.28.1]
+
+- The `axis-title-left`, `-right`, `-top` and `-bottom` attributes give an axis's title text to a loader registered with `registerTitled`, which places it with `axisTitleMeasured`.
+
 ## [0.28.0]
 
 - A `Trace` can carry a size and a label for each point (`sizes`, `labels`), so the tooltip names the nearest bubble's label and values; the application draws the bubbles with Scene.

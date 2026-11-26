@@ -109,8 +109,15 @@ def fetchScene (src : String) : Async Scene := do
     throw (IO.userError s!"fetching {src} gave status {← response.status}")
   return { commands := ← response.bytes }
 
-/-- Makes the scene for a `src`, the CSS size of the chart's canvas, its backing store size in device pixels and the theme its `theme` attribute names, if any. -/
-private abbrev Loader := String → Nat × Nat → Nat × Nat → Option Theme → Async Scene
+/-- The text of the `axis-title-left`, `axis-title-right`, `axis-title-top` and `axis-title-bottom` attributes: none for an attribute that is absent or empty. -/
+structure AxisTitles where
+  left : Option String := none
+  right : Option String := none
+  top : Option String := none
+  bottom : Option String := none
+
+/-- Makes the scene for a `src`, the CSS size of the chart's canvas, its backing store size in device pixels, the theme its `theme` attribute names, if any, and its axis titles. -/
+private abbrev Loader := String → Nat × Nat → Nat × Nat → Option Theme → AxisTitles → Async Scene
 
 private structure Shared where
   canvas : Value
@@ -898,6 +905,11 @@ private def applyInteraction (c : Chart) (i : Interaction) : IO Unit := do
   c.boxConfig.set i.box
   c.selectMode.set i.select
 
+private def axisTitles (c : Chart) : IO AxisTitles := do
+  let attr (name : String) : IO (Option String) := return (← getAttr c.el name).filter (· ≠ "")
+  return { left := ← attr "axis-title-left", right := ← attr "axis-title-right"
+           top := ← attr "axis-title-top", bottom := ← attr "axis-title-bottom" }
+
 private def load (c : Chart) (loader : Loader) : Async Unit := do
   let src ← getAttr c.el "src"
   let level ← getAttr c.el "log-level"
@@ -934,7 +946,7 @@ private def load (c : Chart) (loader : Loader) : Async Unit := do
     try
       let sizes ← sceneSizes c
       c.sceneSize.set sizes
-      let scene ← loader attrs.src sizes.1 sizes.2 (← c.theme.get)
+      let scene ← loader attrs.src sizes.1 sizes.2 (← c.theme.get) (← axisTitles c)
       -- A newer load or a disconnect has overtaken this one.
       if (← c.generation.get) == generation && (← c.alive.get) then
         c.scene.set (some scene)
@@ -978,7 +990,7 @@ private def settle (c : Chart) (loader : Loader) : IO Unit := do
       let sizes ← sceneSizes c
       c.sceneSize.set sizes
       try
-        let scene ← loader ((← getAttr c.el "src").getD "") sizes.1 sizes.2 (← c.theme.get)
+        let scene ← loader ((← getAttr c.el "src").getD "") sizes.1 sizes.2 (← c.theme.get) (← axisTitles c)
         if (← c.alive.get) && (← c.resizes.get) == token then setScene c.el scene
       catch e =>
         fail c s!"making the scene for the new size failed: {e}" [("size", s!"{sizes.1.1}x{sizes.1.2}")]
@@ -1153,25 +1165,30 @@ private def define (tag : String) (loader : Loader) (resizes buttons : Bool) : I
   if buttons then handleButtons
   redrawAll.set do
     for (_, chart) in (← live.get) do invalidate chart
-  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend", "number-format", "chart-title", "theme", "highlight"]
+  defineElement tag #["src", "log-level", "group", "cursor", "interaction", "tooltip", "legend", "number-format", "chart-title", "theme", "highlight",
+      "axis-title-left", "axis-title-right", "axis-title-top", "axis-title-bottom"]
     (← Function.ofFn (connect loader resizes · *> pure .undefined))
     (← Function.ofSyncFn disconnect)
     (← Function.ofFn (changed loader · *> pure .undefined))
 
 /-- Define the custom element `tag`: it draws the scene `loader` makes of its `src` attribute. With `buttons`, the page's `button[data-reset]` and `button[data-unlink]` act on the charts they name, with no page code. -/
 def register (tag : String) (loader : String → Async Scene := fetchScene) (buttons : Bool := false) : IO Unit :=
-  define tag (fun src _ _ _ => loader src) false buttons
+  define tag (fun src _ _ _ _ => loader src) false buttons
 
 /-- Like `register`, for a chart whose scene depends on its size: `loader` is given the `src` and the canvas's CSS width and height, and is called again, after the size has stopped changing for a moment, with the new size. The chart keeps its view, cursor and hidden series across the new scene. -/
 def registerSized (tag : String) (loader : String → Nat → Nat → Async Scene) (buttons : Bool := false) : IO Unit :=
-  define tag (fun src css _ _ => loader src css.1 css.2) true buttons
+  define tag (fun src css _ _ _ => loader src css.1 css.2) true buttons
 
 /-- Like `registerSized`, for a chart whose commands are in device pixels, such as a Gpu frame for a target of a given size: `loader` is given the backing store's size too, which follows the device pixel ratio, and is called again when either size changes. A clip or a stroke width in the commands is then in the pixels of the canvas, whatever the ratio. -/
 def registerPixels (tag : String) (loader : String → Nat × Nat → Nat × Nat → Async Scene) (buttons : Bool := false) : IO Unit :=
-  define tag (fun src css px _ => loader src css px) true buttons
+  define tag (fun src css px _ _ => loader src css px) true buttons
 
 /-- Like `registerPixels`, for a chart that draws in a theme: `loader` is also given the theme the `theme` attribute names (`auto` resolved by the page's colour scheme at the time), none without the attribute, and is called again when the attribute changes. An application passes it to Scene's `Theme.applyAxis` and the series styles, so the scene's axes, gridlines and labels have the theme's colours. -/
 def registerThemed (tag : String) (loader : String → Nat × Nat → Nat × Nat → Option Theme → Async Scene) (buttons : Bool := false) : IO Unit :=
+  define tag (fun src css px theme _ => loader src css px theme) true buttons
+
+/-- Like `registerThemed`, for a chart with titled axes: `loader` is also given the text of the `axis-title-left`, `-right`, `-top` and `-bottom` attributes, and is called again when one changes. It places each title with `axisTitleMeasured`, which also gives the margin its plot must leave beyond the axis. -/
+def registerTitled (tag : String) (loader : String → Nat × Nat → Nat × Nat → Option Theme → AxisTitles → Async Scene) (buttons : Bool := false) : IO Unit :=
   define tag loader true buttons
 
 end Inkproof.Web.Host
