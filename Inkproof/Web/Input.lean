@@ -65,10 +65,11 @@ theorem css_panXY : css .panXY = "pan-x pan-y" := rfl
 
 theorem css_none : css .none = "none" := rfl
 
-/-- What a chart blocks of the browser's touch handling: nothing without a view or with touch off; vertical scrolling is left to the page when the chart's only touch use is a horizontal drag (selecting a range); one-finger scrolling is left to it when only the pinch is used; everything when a finger drag pans or boxes. -/
+/-- What a chart blocks of the browser's touch handling: nothing without a view or with touch off; vertical scrolling is left to the page when the chart's only touch use is a horizontal drag (selecting a range), and everything when it selects a rectangle; one-finger scrolling is left to it when only the pinch is used; everything when a finger drag pans or boxes. -/
 def of (hasView : Bool) (touch : TouchMode) (drag : DragMode) (select : SelectMode) : TouchAction :=
   if !hasView || touch == .off then .auto
-  else if select != .off then .panY
+  else if select == .x then .panY
+  else if select == .xy then .none
   else if drag == .off then .panXY
   else .none
 
@@ -78,6 +79,9 @@ theorem of_touch_off (drag : DragMode) (select : SelectMode) : of true .off drag
   simp [of]
 
 theorem of_select (drag : DragMode) : of true .on drag .x = .panY := by
+  simp [of]
+
+theorem of_select_xy (drag : DragMode) : of true .on drag .xy = .none := by
   simp [of]
 
 theorem of_drag_off : of true .on .off .off = .panXY := by

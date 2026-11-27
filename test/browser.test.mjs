@@ -756,6 +756,33 @@ test('dragging a grip at an edge of the band resizes it and reports the new rang
   await context.close();
 });
 
+test('a drag on a select-xy chart draws a rectangle that the other chart shows in both ranges, and a grip resizes one side', async () => {
+  const { page, context } = await open('/selectxy.html');
+  await drawn(page, 2);
+  await page.evaluate(() => {
+    window.selected = []; window.followed = [];
+    document.getElementById('a').addEventListener('inkproof-select', e => window.selected.push(e.detail));
+    document.getElementById('b').addEventListener('inkproof-view', e => window.followed.push(e.detail));
+  });
+  const point = (type, x, y) => page.evaluate(([type, x, y]) => {
+    const el = document.getElementById('a');
+    const rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent(type, { pointerId: 1, clientX: rect.left + x, clientY: rect.top + y }));
+  }, [type, x, y]);
+  for (const [type, x, y] of [['pointerdown', 150, 60], ['pointermove', 250, 120], ['pointerup', 250, 120]]) await point(type, x, y);
+  await settle(page);
+  const band = (await page.evaluate(() => window.selected)).at(-1);
+  assert.ok(band.xStart < band.xEnd && band.yStart < band.yEnd, 'the drag reports an ordered rectangle');
+  const view = (await page.evaluate(() => window.followed)).at(-1);
+  assert.deepEqual([view.xStart, view.xEnd, view.yStart, view.yEnd], [band.xStart, band.xEnd, band.yStart, band.yEnd], 'the other chart shows both ranges');
+  for (const [type, x, y] of [['pointerdown', 152, 90], ['pointermove', 120, 90], ['pointerup', 120, 90]]) await point(type, x, y);
+  const grown = (await page.evaluate(() => window.selected)).at(-1);
+  assert.ok(grown.xStart < band.xStart, 'the left edge moved out');
+  assert.deepEqual([grown.xEnd, grown.yStart, grown.yEnd], [band.xEnd, band.yStart, band.yEnd], 'the other sides stayed');
+  assert.deepEqual(await page.evaluate(() => window.errors), []);
+  await context.close();
+});
+
 test('buttons reset and unlink charts with no page script, and the page decodes the events', async () => {
   const { page, context } = await open('/buttons.html');
   await drawn(page, 2);

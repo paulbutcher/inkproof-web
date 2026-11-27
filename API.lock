@@ -167,6 +167,7 @@ theorem Inkproof.Web.Interaction.parse_dblclick : ∃ i, Inkproof.Web.Interactio
 theorem Inkproof.Web.Interaction.parse_drag : ∃ i, Inkproof.Web.Interaction.parse (Option.some "drag-box box-x select-x") = Except.ok i ∧ i.drag = Inkproof.Web.DragMode.box ∧ i.box.axes = Inkproof.Viewport.Gesture.Axes.x ∧ i.select = Inkproof.Web.SelectMode.x
 theorem Inkproof.Web.Interaction.parse_none : ∃ i, Inkproof.Web.Interaction.parse Option.none = Except.ok i ∧ i.wheel = Inkproof.Web.WheelMode.zoom ∧ i.touch = Inkproof.Web.TouchMode.on ∧ i.drag = Inkproof.Web.DragMode.pan ∧ i.select = Inkproof.Web.SelectMode.off ∧ i.box.axes = Inkproof.Viewport.Gesture.Axes.both ∧ i.box.minDistance = Inkproof.Viewport.Gesture.minBox
 theorem Inkproof.Web.Interaction.parse_repeated : ∃ e, Inkproof.Web.Interaction.parse (Option.some "no-drag no-drag") = Except.error e
+theorem Inkproof.Web.Interaction.parse_select_xy : ∃ i, Inkproof.Web.Interaction.parse (Option.some "select-xy") = Except.ok i ∧ i.select = Inkproof.Web.SelectMode.xy
 theorem Inkproof.Web.Interaction.parse_two_wheels : ∃ e, Inkproof.Web.Interaction.parse (Option.some "wheel-zoom no-wheel") = Except.error e
 theorem Inkproof.Web.Interaction.parse_wheel : ∃ i, Inkproof.Web.Interaction.parse (Option.some "wheel-ctrl no-touch") = Except.ok i ∧ i.wheel = Inkproof.Web.WheelMode.ctrl ∧ i.touch = Inkproof.Web.TouchMode.off
 field Inkproof.Web.Interaction.select : Inkproof.Web.Interaction → Inkproof.Web.SelectMode
@@ -423,23 +424,44 @@ field Inkproof.Web.SceneState.generation : Inkproof.Web.SceneState → Nat
 constructor Inkproof.Web.SceneState.mk : Inkproof.Gpu.Retained → Nat → Bool → Inkproof.Web.SceneState
 field Inkproof.Web.SceneState.retained : Inkproof.Web.SceneState → Inkproof.Gpu.Retained
 def Inkproof.Web.Select.config : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.Selection.Config Float
+def Inkproof.Web.Select.configY : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.Selection.Config Float
+theorem Inkproof.Web.Select.configY_domain : ∀ (c : Inkproof.Viewport.ViewConfig Float), (Inkproof.Web.Select.configY c).domain = (Inkproof.Viewport.View.home c).y
+theorem Inkproof.Web.Select.configY_minWidth : ∀ (c : Inkproof.Viewport.ViewConfig Float), (Inkproof.Web.Select.configY c).minWidth = Inkproof.Web.Select.minPixels * ((Inkproof.Viewport.View.home c).y.span / c.y.length)
+theorem Inkproof.Web.Select.configY_tolerance : ∀ (c : Inkproof.Viewport.ViewConfig Float), (Inkproof.Web.Select.configY c).tolerance = Inkproof.Web.Select.grabPixels * ((Inkproof.Viewport.View.home c).y.span / c.y.length)
 theorem Inkproof.Web.Select.config_domain : ∀ (c : Inkproof.Viewport.ViewConfig Float), (Inkproof.Web.Select.config c).domain = (Inkproof.Viewport.View.home c).x
 theorem Inkproof.Web.Select.config_minWidth : ∀ (c : Inkproof.Viewport.ViewConfig Float), (Inkproof.Web.Select.config c).minWidth = Inkproof.Web.Select.minPixels * ((Inkproof.Viewport.View.home c).x.span / c.x.length)
 theorem Inkproof.Web.Select.config_tolerance : ∀ (c : Inkproof.Viewport.ViewConfig Float), (Inkproof.Web.Select.config c).tolerance = Inkproof.Web.Select.grabPixels * ((Inkproof.Viewport.View.home c).x.span / c.x.length)
+def Inkproof.Web.Select.dragXY : Inkproof.Viewport.Selection.Config Float → Inkproof.Viewport.Selection.Config Float → Option (Inkproof.Viewport.Selection.Drag Float) → Option (Inkproof.Viewport.Selection.Drag Float) → Option (Inkproof.Viewport.Selection.Band Float) → Option (Inkproof.Viewport.Selection.Band Float) → Float → Float → Option (Inkproof.Viewport.Selection.Band Float) × Option (Inkproof.Viewport.Selection.Band Float)
+theorem Inkproof.Web.Select.dragXY_eq : ∀ (cx cy : Inkproof.Viewport.Selection.Config Float) (dx dy : Option (Inkproof.Viewport.Selection.Drag Float)) (bx by_ : Option (Inkproof.Viewport.Selection.Band Float)) (px py : Float), Inkproof.Web.Select.dragXY cx cy dx dy bx by_ px py = match match dx with | Option.some d => Inkproof.Viewport.Selection.Drag.at cx d px | Option.none => bx, match dy with | Option.some d => Inkproof.Viewport.Selection.Drag.at cy d py | Option.none => by_ with | Option.some x, Option.some y => (Option.some x, Option.some y) | x, x_1 => (Option.none, Option.none)
+theorem Inkproof.Web.Select.dragXY_keep : ∀ (cx cy : Inkproof.Viewport.Selection.Config Float) (bx by_ : Inkproof.Viewport.Selection.Band Float) (px py : Float), Inkproof.Web.Select.dragXY cx cy Option.none Option.none (Option.some bx) (Option.some by_) px py = (Option.some bx, Option.some by_)
 def Inkproof.Web.Select.extent : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Inkproof.Viewport.Selection.Band Float → Float × Float
+def Inkproof.Web.Select.extentY : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Inkproof.Viewport.Selection.Band Float → Float × Float
+theorem Inkproof.Web.Select.extentY_eq : ∀ (c : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (band : Inkproof.Viewport.Selection.Band Float), Inkproof.Web.Select.extentY c view band = (c.y.length - Inkproof.Viewport.Interval.toScreen c.y view.y band.hi, c.y.length - Inkproof.Viewport.Interval.toScreen c.y view.y band.lo)
 theorem Inkproof.Web.Select.extent_eq : ∀ (c : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float) (band : Inkproof.Viewport.Selection.Band Float), Inkproof.Web.Select.extent c view band = (Inkproof.Viewport.Interval.toScreen c.x view.x band.lo, Inkproof.Viewport.Interval.toScreen c.x view.x band.hi)
 def Inkproof.Web.Select.following : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Option (Inkproof.Viewport.Selection.Band Float)
+def Inkproof.Web.Select.followingY : Inkproof.Viewport.ViewConfig Float → Inkproof.Viewport.View Float → Option (Inkproof.Viewport.Selection.Band Float)
+theorem Inkproof.Web.Select.followingY_eq : ∀ (c : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float), Inkproof.Web.Select.followingY c view = Inkproof.Viewport.Selection.draw (Inkproof.Web.Select.configY c) view.y.start (view.y.start + view.y.span)
 theorem Inkproof.Web.Select.following_eq : ∀ (c : Inkproof.Viewport.ViewConfig Float) (view : Inkproof.Viewport.View Float), Inkproof.Web.Select.following c view = Inkproof.Viewport.Selection.draw (Inkproof.Web.Select.config c) view.x.start (view.x.start + view.x.span)
 def Inkproof.Web.Select.grabPixels : Float
 def Inkproof.Web.Select.minPixels : Float
+def Inkproof.Web.Select.pressXY : Inkproof.Viewport.Selection.Config Float → Inkproof.Viewport.Selection.Config Float → Option (Inkproof.Viewport.Selection.Band Float) → Option (Inkproof.Viewport.Selection.Band Float) → Float → Float → Option (Inkproof.Viewport.Selection.Drag Float) × Option (Inkproof.Viewport.Selection.Drag Float)
+theorem Inkproof.Web.Select.pressXY_eq : ∀ (cx cy : Inkproof.Viewport.Selection.Config Float) (bx by_ : Option (Inkproof.Viewport.Selection.Band Float)) (px py : Float), Inkproof.Web.Select.pressXY cx cy bx by_ px py = if (Inkproof.Viewport.Selection.hit cx bx px == Inkproof.Viewport.Selection.Grab.outside || Inkproof.Viewport.Selection.hit cy by_ py == Inkproof.Viewport.Selection.Grab.outside) = Bool.true then (Option.some (Inkproof.Viewport.Selection.press cx Option.none px), Option.some (Inkproof.Viewport.Selection.press cy Option.none py)) else if (Inkproof.Viewport.Selection.hit cx bx px == Inkproof.Viewport.Selection.Grab.body && Inkproof.Viewport.Selection.hit cy by_ py != Inkproof.Viewport.Selection.Grab.body) = Bool.true then (Option.none, Option.some (Inkproof.Viewport.Selection.press cy by_ py)) else if (Inkproof.Viewport.Selection.hit cy by_ py == Inkproof.Viewport.Selection.Grab.body && Inkproof.Viewport.Selection.hit cx bx px != Inkproof.Viewport.Selection.Grab.body) = Bool.true then (Option.some (Inkproof.Viewport.Selection.press cx bx px), Option.none) else (Option.some (Inkproof.Viewport.Selection.press cx bx px), Option.some (Inkproof.Viewport.Selection.press cy by_ py))
+theorem Inkproof.Web.Select.pressXY_outside : ∀ (cx cy : Inkproof.Viewport.Selection.Config Float) (px py : Float), Inkproof.Web.Select.pressXY cx cy Option.none Option.none px py = (Option.some (Inkproof.Viewport.Selection.press cx Option.none px), Option.some (Inkproof.Viewport.Selection.press cy Option.none py))
 def Inkproof.Web.Select.shown : Inkproof.Viewport.View Float → Inkproof.Viewport.Selection.Band Float → Inkproof.Viewport.View Float
+def Inkproof.Web.Select.shownXY : Inkproof.Viewport.View Float → Inkproof.Viewport.Selection.Band Float → Inkproof.Viewport.Selection.Band Float → Inkproof.Viewport.View Float
+theorem Inkproof.Web.Select.shownXY_x : ∀ (view : Inkproof.Viewport.View Float) (bx by_ : Inkproof.Viewport.Selection.Band Float), (Inkproof.Web.Select.shownXY view bx by_).x = bx.toInterval
+theorem Inkproof.Web.Select.shownXY_y : ∀ (view : Inkproof.Viewport.View Float) (bx by_ : Inkproof.Viewport.Selection.Band Float), (Inkproof.Web.Select.shownXY view bx by_).y = by_.toInterval
 theorem Inkproof.Web.Select.shown_x : ∀ (view : Inkproof.Viewport.View Float) (band : Inkproof.Viewport.Selection.Band Float), (Inkproof.Web.Select.shown view band).x = band.toInterval
 theorem Inkproof.Web.Select.shown_y : ∀ (view : Inkproof.Viewport.View Float) (band : Inkproof.Viewport.Selection.Band Float), (Inkproof.Web.Select.shown view band).y = view.y
 inductive Inkproof.Web.SelectMode : Type
+def Inkproof.Web.SelectMode.hasY : Inkproof.Web.SelectMode → Bool
+theorem Inkproof.Web.SelectMode.hasY_x : Inkproof.Web.SelectMode.x.hasY = Bool.false
+theorem Inkproof.Web.SelectMode.hasY_xy : Inkproof.Web.SelectMode.xy.hasY = Bool.true
 def Inkproof.Web.SelectMode.ofNat : Nat → Inkproof.Web.SelectMode
 theorem Inkproof.Web.SelectMode.ofNat_ctorIdx : ∀ (x : Inkproof.Web.SelectMode), Inkproof.Web.SelectMode.ofNat x.ctorIdx = x
 constructor Inkproof.Web.SelectMode.off : Inkproof.Web.SelectMode
 constructor Inkproof.Web.SelectMode.x : Inkproof.Web.SelectMode
+constructor Inkproof.Web.SelectMode.xy : Inkproof.Web.SelectMode
 structure Inkproof.Web.SeriesEvent : Type
 def Inkproof.Web.SeriesEvent.decode : Float → Bool → Option Inkproof.Web.SeriesEvent
 theorem Inkproof.Web.SeriesEvent.decode_eq : ∀ (series : Float) (hidden : Bool) (e : Inkproof.Web.SeriesEvent), Inkproof.Web.SeriesEvent.decode series hidden = Option.some e → e = { series := series.toUInt64.toNat, hidden := hidden }
@@ -516,6 +538,7 @@ theorem Inkproof.Web.TouchAction.of_drag : ∀ (drag : Inkproof.Web.DragMode), d
 theorem Inkproof.Web.TouchAction.of_drag_off : Inkproof.Web.TouchAction.of Bool.true Inkproof.Web.TouchMode.on Inkproof.Web.DragMode.off Inkproof.Web.SelectMode.off = Inkproof.Web.TouchAction.panXY
 theorem Inkproof.Web.TouchAction.of_no_view : ∀ (touch : Inkproof.Web.TouchMode) (drag : Inkproof.Web.DragMode) (select : Inkproof.Web.SelectMode), Inkproof.Web.TouchAction.of Bool.false touch drag select = Inkproof.Web.TouchAction.auto
 theorem Inkproof.Web.TouchAction.of_select : ∀ (drag : Inkproof.Web.DragMode), Inkproof.Web.TouchAction.of Bool.true Inkproof.Web.TouchMode.on drag Inkproof.Web.SelectMode.x = Inkproof.Web.TouchAction.panY
+theorem Inkproof.Web.TouchAction.of_select_xy : ∀ (drag : Inkproof.Web.DragMode), Inkproof.Web.TouchAction.of Bool.true Inkproof.Web.TouchMode.on drag Inkproof.Web.SelectMode.xy = Inkproof.Web.TouchAction.none
 theorem Inkproof.Web.TouchAction.of_touch_off : ∀ (drag : Inkproof.Web.DragMode) (select : Inkproof.Web.SelectMode), Inkproof.Web.TouchAction.of Bool.true Inkproof.Web.TouchMode.off drag select = Inkproof.Web.TouchAction.auto
 constructor Inkproof.Web.TouchAction.panXY : Inkproof.Web.TouchAction
 constructor Inkproof.Web.TouchAction.panY : Inkproof.Web.TouchAction

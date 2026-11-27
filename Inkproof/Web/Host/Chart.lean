@@ -169,6 +169,11 @@ private structure Chart where
   /-- The selected x range, in data coordinates. -/
   band : IO.Ref (Option (Selection.Band Float))
   selectDrag : IO.Ref (Option (Selection.Drag Float))
+  /-- The selected y range, with a rectangle selection. -/
+  bandY : IO.Ref (Option (Selection.Band Float))
+  selectDragY : IO.Ref (Option (Selection.Drag Float))
+  /-- Whether a selecting drag is in progress; an axis it leaves alone has no drag of its own. -/
+  selecting : IO.Ref Bool
   /-- The data position of the cursor, with the y position when the pointer is over this chart. -/
   cursor : IO.Ref (Option (Float × Option Float))
   frame : IO.Ref Frame
@@ -303,15 +308,23 @@ private def draw (c : Chart) : IO Unit := do
   if let (some band, some config) := (← c.band.get, scene.access.view) then
     let view := ((← c.nav.get).map (·.view)).getD (View.home config)
     let (left, right) := Select.extent config view band
+    let (top, bottom) := match ← c.bandY.get with
+      | some y => Select.extentY config view y
+      | none => (0, config.y.length)
     let origin := scene.access.plotOrigin
     c.ctx.set "fillStyle" "rgba(0, 100, 255, 0.2)"
-    c.ctx.callMethod "fillRect" #[toJS (origin.1 + left), toJS origin.2, toJS (right - left), toJS config.y.length] Unit
+    c.ctx.callMethod "fillRect" #[toJS (origin.1 + left), toJS (origin.2 + top), toJS (right - left), toJS (bottom - top)] Unit
     c.ctx.set "strokeStyle" "rgba(0, 100, 255, 0.8)"
     c.ctx.set "lineWidth" 1
-    c.ctx.callMethod "strokeRect" #[toJS (origin.1 + left), toJS origin.2, toJS (right - left), toJS config.y.length] Unit
+    c.ctx.callMethod "strokeRect" #[toJS (origin.1 + left), toJS (origin.2 + top), toJS (right - left), toJS (bottom - top)] Unit
     c.ctx.set "fillStyle" "rgba(0, 100, 255, 0.8)"
+    let middle := (top + bottom) / 2
     for edge in #[left, right] do
-      c.ctx.callMethod "fillRect" #[toJS (origin.1 + edge - 3), toJS (origin.2 + config.y.length / 2 - 12), toJS (6 : Float), toJS (24 : Float)] Unit
+      c.ctx.callMethod "fillRect" #[toJS (origin.1 + edge - 3), toJS (origin.2 + middle - 12), toJS (6 : Float), toJS (24 : Float)] Unit
+    if (← c.selectMode.get).hasY then
+      let centre := (left + right) / 2
+      for edge in #[top, bottom] do
+        c.ctx.callMethod "fillRect" #[toJS (origin.1 + centre - 12), toJS (origin.2 + edge - 3), toJS (24 : Float), toJS (6 : Float)] Unit
   if let (some (x, y), some config) := (← c.cursor.get, scene.access.view) then
     let view := ((← c.nav.get).map (·.view)).getD (View.home config)
     c.ctx.set "strokeStyle" "rgba(0, 0, 0, 0.5)"
@@ -464,7 +477,7 @@ private def build (id : Nat) (el : Value) : IO Chart := do
     id, el, canvas, ctx, announcer, table, tip, legendEl, highlightEl, titleEl
     nav := ← IO.mkRef none, listeners := ← IO.mkRef #[], pointers := ← IO.mkRef #[], boxStart := ← IO.mkRef none,
     boxConfig := ← IO.mkRef {}, group := ← IO.mkRef none
-    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, highlightOn := ← IO.mkRef false, focusStyle := ← IO.mkRef none, focused := ← IO.mkRef none, numberFormat := ← IO.mkRef none, theme := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, dblclickReset := ← IO.mkRef false, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, cursor := ← IO.mkRef none
+    dragMode := ← IO.mkRef .pan, wheelMode := ← IO.mkRef .zoom, touchMode := ← IO.mkRef .on, cursorMode := ← IO.mkRef .off, cursorDotted := ← IO.mkRef false, markerMode := ← IO.mkRef .off, markerStyle := ← IO.mkRef {}, tooltipStyle := ← IO.mkRef none, highlightOn := ← IO.mkRef false, focusStyle := ← IO.mkRef none, focused := ← IO.mkRef none, numberFormat := ← IO.mkRef none, theme := ← IO.mkRef none, legendStyle := ← IO.mkRef none, hidden := ← IO.mkRef #[], hiddenGroups := ← IO.mkRef #[], selectMode := ← IO.mkRef .off, dblclickReset := ← IO.mkRef false, band := ← IO.mkRef none, selectDrag := ← IO.mkRef none, bandY := ← IO.mkRef none, selectDragY := ← IO.mkRef none, selecting := ← IO.mkRef false, cursor := ← IO.mkRef none
     frame := ← IO.mkRef Frame.initial, scheduled := ← IO.mkRef false, alive := ← IO.mkRef true
     size := ← IO.mkRef ⟨0, 0⟩, ratio := ← IO.mkRef 1000, scene := ← IO.mkRef none
     generation := ← IO.mkRef 0, frameCallback := ← IO.mkRef none, observer := ← IO.mkRef none, sceneSize := ← IO.mkRef ((0, 0), (0, 0)), resizes := ← IO.mkRef 0
@@ -519,17 +532,20 @@ private def peers (name : String) : IO (Array (Chart × Scene × Nav)) := do
   return found
 
 /-- Make `band` the chart's selection and tell the application, without telling the chart's group. -/
-private def applyBand (c : Chart) (band : Option (Selection.Band Float)) : IO Unit := do
-  if (← c.band.get) == band then return
+private def applyBand (c : Chart) (band : Option (Selection.Band Float)) (y : Option (Selection.Band Float) := none) : IO Unit := do
+  if (← c.band.get) == band && (← c.bandY.get) == y then return
   c.band.set band
-  let edge (f : Selection.Band Float → Float) : Data := match band with
+  c.bandY.set y
+  let edge (b : Option (Selection.Band Float)) (f : Selection.Band Float → Float) : Data := match b with
     | some b => toJS (f b)
     | none => .null
-  dispatch c.el "inkproof-select" (obj [("xStart", edge (·.lo)), ("xEnd", edge (·.hi))])
+  let xs := [("xStart", edge band (·.lo)), ("xEnd", edge band (·.hi))]
+  let ys := if (← c.selectMode.get).hasY then [("yStart", edge y (·.lo)), ("yEnd", edge y (·.hi))] else []
+  dispatch c.el "inkproof-select" (obj (xs ++ ys))
   invalidate c
 
-/-- Give every other chart in `origin`'s group the x range of `view`, which is the origin's, and tell each that changed. A chart that selects keeps its own range and moves its band to it. -/
-private def followFrom (origin : Chart) (view : View Float) : IO Unit := do
+/-- Give every other chart in `origin`'s group the x range of `view`, which is the origin's, and with `withY` its y range too, and tell each that changed. A chart that selects keeps its own range and moves its band to it. -/
+private def followFrom (origin : Chart) (view : View Float) (withY : Bool := false) : IO Unit := do
   let some name ← origin.group.get | return
   let members ← peers name
   let some i := members.findIdx? (·.1.id == origin.id) | return
@@ -538,9 +554,12 @@ private def followFrom (origin : Chart) (view : View Float) : IO Unit := do
     let (c, scene, nav) := members[j]
     if j == i then continue
     if (← c.selectMode.get) != .off then
-      if let some config := scene.access.view then applyBand c (Select.following config view)
+      if let some config := scene.access.view then
+        let y := if (← c.selectMode.get).hasY then Select.followingY config view else none
+        applyBand c (Select.following config view) y
     else
       let next := views[j]?.getD nav.view
+      let next := if withY then { next with y := view.y } else next
       if next != nav.view then
         c.nav.set (some { nav with view := next })
         log .debug "chart followed its group" [("group", name), ("chart", toString c.id)]
@@ -548,14 +567,18 @@ private def followFrom (origin : Chart) (view : View Float) : IO Unit := do
 
 /-- The view a chart gives its group: its own, or for one that selects, the one that shows its band. -/
 private def groupView (c : Chart) (nav : Nav) : IO (View Float) := do
-  match ← c.band.get with
-  | some band => return Select.shown nav.view band
-  | none => return nav.view
+  match ← c.band.get, ← c.bandY.get with
+  | some band, some y => return Select.shownXY nav.view band y
+  | some band, none => return Select.shown nav.view band
+  | none, _ => return nav.view
 
-/-- Make `band` the chart's selection, and the x range of the rest of its group. -/
-private def selectBand (c : Chart) (band : Option (Selection.Band Float)) : IO Unit := do
-  applyBand c band
-  if let (some band, some nav) := (band, ← c.nav.get) then followFrom c (Select.shown nav.view band)
+/-- Make `band` the chart's selection, with `y` its y range if it has one, and the x range, and the y range if any, of the rest of its group. -/
+private def selectBand (c : Chart) (band : Option (Selection.Band Float)) (y : Option (Selection.Band Float) := none) : IO Unit := do
+  applyBand c band y
+  if let (some band, some nav) := (band, ← c.nav.get) then
+    match y with
+    | some y => followFrom c (Select.shownXY nav.view band y) true
+    | none => followFrom c (Select.shown nav.view band)
 
 /-- The scene's value groups with the legend's choice of which are hidden. -/
 private def activeGroups (c : Chart) (scene : Scene) : IO (Array ValueGroup) := do
@@ -830,6 +853,11 @@ private def dataX (navConfig : NavConfig) (nav : Nav) (p : Px) : Float :=
   let v := Gesture.toView navConfig.view p
   (View.cursor navConfig.view nav.view v.1 v.2).1
 
+/-- The data y position at plot position `p`. -/
+private def dataY (navConfig : NavConfig) (nav : Nav) (p : Px) : Float :=
+  let v := Gesture.toView navConfig.view p
+  (View.cursor navConfig.view nav.view v.1 v.2).2
+
 private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
   let some (_, navConfig, nav) ← navigable c | return
   let id ← event.get "pointerId" Nat
@@ -837,11 +865,18 @@ private def onPointerDown (c : Chart) (event : Value) : IO Unit := do
   unless Gesture.inside navConfig.view p do return
   if (← event.get "pointerType" String) == "touch" && (← c.touchMode.get) == .off then return
   if (← c.selectMode.get) != .off then
-    if (← c.selectDrag.get).isNone then
+    unless (← c.selecting.get) do
       try c.el.callMethod "setPointerCapture" #[toJS id] Unit
       catch e => log .warn "pointer capture failed, continuing without it" [("error", toString e)]
       let x := dataX navConfig nav p
-      c.selectDrag.set (some (Selection.press (Select.config navConfig.view) (← c.band.get) x))
+      if (← c.selectMode.get).hasY then
+        let (dx, dy) := Select.pressXY (Select.config navConfig.view) (Select.configY navConfig.view) (← c.band.get) (← c.bandY.get) x (dataY navConfig nav p)
+        c.selectDrag.set dx
+        c.selectDragY.set dy
+        c.selecting.set true
+      else
+        c.selectDrag.set (some (Selection.press (Select.config navConfig.view) (← c.band.get) x))
+        c.selecting.set true
     return
   let mode ← c.dragMode.get
   -- A mouse has no gesture but the drag; a touch is still tracked for a pinch.
@@ -884,8 +919,13 @@ private def onPointerMove (c : Chart) (event : Value) : IO Unit := do
   let id ← event.get "pointerId" Nat
   let p ← position c event
   let tracked ← c.pointers.get
-  if let some drag ← c.selectDrag.get then
-    selectBand c (Selection.Drag.at (Select.config navConfig.view) drag (dataX navConfig nav p))
+  if (← c.selecting.get) then
+    if (← c.selectMode.get).hasY then
+      let (x, y) := Select.dragXY (Select.config navConfig.view) (Select.configY navConfig.view) (← c.selectDrag.get) (← c.selectDragY.get)
+        (← c.band.get) (← c.bandY.get) (dataX navConfig nav p) (dataY navConfig nav p)
+      selectBand c x y
+    else if let some drag ← c.selectDrag.get then
+      selectBand c (Selection.Drag.at (Select.config navConfig.view) drag (dataX navConfig nav p))
   if tracked.any (·.1 == id) then
     let toView := Gesture.toView navConfig.view
     let moved := tracked.map fun t => if t.1 == id then (id, p) else t
@@ -911,6 +951,8 @@ private def onPointerMove (c : Chart) (event : Value) : IO Unit := do
 private def onPointerUp (c : Chart) (event : Value) : IO Unit := do
   let id ← event.get "pointerId" Nat
   c.selectDrag.set none
+  c.selectDragY.set none
+  c.selecting.set false
   if let some start ← c.boxStart.get then
     c.boxStart.set none
     if (← event.get "type" String) == "pointerup" then
@@ -1037,12 +1079,15 @@ def setCursor (el : Value) (x : Option Float) : IO Unit := do
   unless (← c.alive.get) do return
   moveCursor c (x.map (·, none))
 
-/-- Select the x range `range` of a chart with the `select` attribute, as a drag would, or clear its selection. Other charts in its group take the range as theirs. -/
+/-- Select the x range `range` of a chart with the `select` attribute, keeping the y range of a rectangle selection, as a drag would, or clear its selection. Other charts in its group take the range as theirs. -/
 def setSelection (el : Value) (range : Option (Float × Float)) : IO Unit := do
   let some c ← chartOfElement el | return
   unless (← c.alive.get) && (← c.selectMode.get) != .off do return
   let some (_, navConfig, _) ← navigable c | return
-  selectBand c (range.bind fun (lo, hi) => Selection.draw (Select.config navConfig.view) lo hi)
+  let y ← if (← c.selectMode.get).hasY then
+      pure ((← c.bandY.get).orElse fun _ => Select.followingY navConfig.view (View.home navConfig.view))
+    else pure none
+  selectBand c (range.bind fun (lo, hi) => Selection.draw (Select.config navConfig.view) lo hi) y
 
 /-- Apply `command` to the chart as the key for it would, telling the application of what changed. -/
 def apply (el : Value) (command : Command) : IO Unit := do
@@ -1178,10 +1223,13 @@ private def reinput (c : Chart) (value : Option String) : IO Unit := do
   | .ok i =>
     applyInteraction c i
     c.selectDrag.set none
+    c.selectDragY.set none
+    c.selecting.set false
     c.pointers.set #[]
     c.boxStart.set none
     syncTouch c
     if i.select == .off then applyBand c none
+    else if !i.select.hasY then applyBand c (← c.band.get)
     invalidate c
 
 private def changed (loader : Loader) (args : Array Data) : Async Unit := do

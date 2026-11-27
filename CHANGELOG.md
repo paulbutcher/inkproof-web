@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.33.0]
+
+- The `select-xy` word of the `interaction` attribute selects a rectangle, with a grip at each edge; the `inkproof-select` event gains `yStart` and `yEnd`, and the other charts of the group show both ranges.
+
 ## [0.32.0]
 
 - Box zoom takes a `box-auto-uni-Npx` form: a box smaller than N pixels on both sides zooms both axes, a larger one only its longer side (`BoxConfig.uni`, `BoxConfig.axesFor`).

@@ -31,7 +31,7 @@ private structure Choices where
   dblclickReset : Option Bool := none
 
 private def forms : String :=
-  "wheel-zoom, wheel-ctrl, no-wheel, touch, no-touch, drag-pan, drag-box, no-drag, box-x, box-y, box-xy, box-auto, box-auto-uni-50px, select-x, dblclick-reset or a least box drag in pixels such as 4px"
+  "wheel-zoom, wheel-ctrl, no-wheel, touch, no-touch, drag-pan, drag-box, no-drag, box-x, box-y, box-xy, box-auto, box-auto-uni-50px, select-x, select-xy, dblclick-reset or a least box drag in pixels such as 4px"
 
 private def choose (c : Choices) (w : String) : Except String Choices :=
   match w with
@@ -48,6 +48,7 @@ private def choose (c : Choices) (w : String) : Except String Choices :=
   | "box-xy" => (Facet.pick "interaction" "box axes" w c.axes .both).map ({ c with axes := · })
   | "box-auto" => (Facet.pick "interaction" "box axes" w c.axes .auto).map ({ c with axes := · })
   | "select-x" => (Facet.pick "interaction" "select" w c.select .x).map ({ c with select := · })
+  | "select-xy" => (Facet.pick "interaction" "select" w c.select .xy).map ({ c with select := · })
   | "dblclick-reset" => (Facet.pick "interaction" "double click" w c.dblclickReset true).map ({ c with dblclickReset := · })
   | _ =>
     match (if w.startsWith "box-auto-uni-" then Facet.pixels (w.drop 13).toString else none) with
@@ -66,7 +67,7 @@ private def finish (c : Choices) : Interaction :=
   { wheel := c.wheel.getD .zoom, touch := c.touch.getD .on, drag := c.drag.getD .pan, select := c.select.getD .off, dblclickReset := c.dblclickReset.getD false,
     box := { axes := c.axes.getD .both, minDistance := (c.minDistance.map Nat.toFloat).getD Gesture.minBox, uni := c.uni.map Nat.toFloat } }
 
-/-- Validate the raw `interaction` attribute: a list of words in any order, each kind at most once; one not named takes its default. `wheel-zoom`, `wheel-ctrl` (only with Ctrl or Meta held) or `no-wheel`; `touch` or `no-touch`, leaving finger gestures to the browser; `drag-pan`, `drag-box` or `no-drag`, which shift swaps; `box-x`, `box-y`, `box-xy` or `box-auto` for the axes a box drag zooms (`box-auto-uni-50px` is `box-auto`, but a drag under 50 pixels on both sides zooms both axes) and a size in pixels such as `4px` for the least such drag; `select-x`, for a drag that selects an x range; and `dblclick-reset`, for a double click that restores the home view. -/
+/-- Validate the raw `interaction` attribute: a list of words in any order, each kind at most once; one not named takes its default. `wheel-zoom`, `wheel-ctrl` (only with Ctrl or Meta held) or `no-wheel`; `touch` or `no-touch`, leaving finger gestures to the browser; `drag-pan`, `drag-box` or `no-drag`, which shift swaps; `box-x`, `box-y`, `box-xy` or `box-auto` for the axes a box drag zooms (`box-auto-uni-50px` is `box-auto`, but a drag under 50 pixels on both sides zooms both axes) and a size in pixels such as `4px` for the least such drag; `select-x` or `select-xy`, for a drag that selects an x range or a rectangle; and `dblclick-reset`, for a double click that restores the home view. -/
 def parse (s : Option String) : Except String Interaction :=
   ((Legend.words (s.getD "")).foldlM choose {}).map finish
 
@@ -74,6 +75,8 @@ theorem parse_none : ∃ i, parse none = .ok i ∧ i.wheel = .zoom ∧ i.touch =
     i.box.axes = .both ∧ i.box.minDistance = Gesture.minBox := ⟨_, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 theorem parse_wheel : ∃ i, parse (some "wheel-ctrl no-touch") = .ok i ∧ i.wheel = .ctrl ∧ i.touch = .off := ⟨_, rfl, rfl, rfl⟩
+
+theorem parse_select_xy : ∃ i, parse (some "select-xy") = .ok i ∧ i.select = .xy := ⟨_, rfl, rfl⟩
 
 theorem parse_drag : ∃ i, parse (some "drag-box box-x select-x") = .ok i ∧ i.drag = .box ∧ i.box.axes = .x ∧
     i.select = .x := ⟨_, rfl, rfl, rfl, rfl⟩
